@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+package zio.entity.runtime.akka.serialization;
+option java_package = "zio.entity.runtime.akka.serialization.msg";
+option optimize_for = SPEED;
+
+message KeyedCommand {
+    required string key = 1;
+    required bytes bytes = 2;
+}
+
+

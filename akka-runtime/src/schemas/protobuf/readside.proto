@@ -1,0 +1,11 @@
+syntax = "proto2";
+
+package zio.entity.runtime.akka.readside.serialization;
+option java_package = "zio.entity.runtime.akka.readside.serialization.msg";
+option optimize_for = SPEED;
+
+message KeepRunning {
+    required uint32 workerId = 1;
+}
+
+
