@@ -52,10 +52,11 @@ object LocalRuntimeWithProtocol extends AbstractRuntime {
   )(implicit protocol: StemProtocol[Algebra, State, Event, Reject]): UIO[Key => Algebra] = {
     val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
 // TODO in order to have an identity protocol, we need
-    combinatorMap.get.map { cache =>
+    UIO.succeed(
       KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](
         { (key: Key, bytes: BitVector) =>
           val algebraCombinators: UIO[Combinators[State, Event, Reject]] = for {
+            cache <- combinatorMap.get
             combinatorRetrieved <- cache.get(key) match {
               case Some(combinator) =>
                 combinator
@@ -78,12 +79,12 @@ object LocalRuntimeWithProtocol extends AbstractRuntime {
         },
         errorHandler
       )(protocol)
-    }
+    )
   }
 
   type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
 
-  override def call[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
+  override def keyedEntity[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
     key: Key,
     processor: Entity[Key, Algebra, State, Event, Reject]
   )(

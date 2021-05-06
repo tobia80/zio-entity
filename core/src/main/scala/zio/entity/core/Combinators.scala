@@ -1,5 +1,6 @@
 package zio.entity.core
 
+import zio.ZIO.ServiceWithPartiallyApplied
 import zio._
 import zio.entity.data.EntityEvent
 
@@ -15,18 +16,8 @@ object Combinators {
   type EIO[State, Event, Reject, Result] = ZIO[Has[Combinators[State, Event, Reject]], Reject, Result]
   type ETask[State, Event, Result] = ZIO[Has[Combinators[State, Event, Throwable]], Throwable, Result]
 
-  //TODO: use same technique in ZIO to avoid repeating type params... new ZIO.provideSomeLayer...
-  def read[State: Tag, Event: Tag, Reject: Tag]: ZIO[Has[Combinators[State, Event, Reject]], Reject, State] =
-    ZIO.accessM[Has[Combinators[State, Event, Reject]]](_.get.read)
-
-  def append[State: Tag, Event: Tag, Reject: Tag](es: Event, other: Event*): ZIO[Has[Combinators[State, Event, Reject]], Reject, Unit] =
-    ZIO.accessM[Has[Combinators[State, Event, Reject]]](_.get.append(es, other: _*))
-
-  def ignore[State: Tag, Event: Tag, Reject: Tag]: ZIO[Has[Combinators[State, Event, Reject]], Nothing, Unit] =
-    ZIO.accessM[Has[Combinators[State, Event, Reject]]](_.get.ignore)
-
-  def reject[State: Tag, Event: Tag, Reject: Tag, A](r: Reject): ZIO[Has[Combinators[State, Event, Reject]], Reject, A] =
-    ZIO.accessM[Has[Combinators[State, Event, Reject]]](_.get.reject(r))
+  def combinators[Service]: ServiceWithPartiallyApplied[Service] =
+    new ServiceWithPartiallyApplied[Service]
 
   case class ImpossibleTransitionException[Key, Event, State](state: State, eventPayload: EntityEvent[Key, Event])
       extends RuntimeException(s"Impossible transition from state $state with event $eventPayload")

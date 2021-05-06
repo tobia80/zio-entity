@@ -14,7 +14,7 @@ import zio.entity.test.TestEntityRuntime._
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{UIO, ZLayer}
+import zio.{UIO, ZIO, ZLayer}
 
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
@@ -26,15 +26,21 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
     testM("receives commands, produces events and updates state") {
       (for {
         (counter, probe) <- testEntityWithProbes[String, CounterCommandHandler, Int, CountEvent, String]
-        res <- call("key", counter)(
+        res <- keyedEntity("key", counter)(
           _.increase(3)
         )
+        finalRes <- keyedEntity("key", counter)(
+          _.decrease(2)
+        )
         events <- probe("key").events
-        state  <- probe("key").state
+        fromState <- keyedEntity("key", counter)(
+          _.getValue
+        )
       } yield {
+        assert(events)(equalTo(List(CountIncremented(3), CountDecremented(2)))) &&
         assert(res)(equalTo(3)) &&
-        assert(events)(equalTo(List(CountIncremented(3))))
-        assert(state)(equalTo(3))
+        assert(finalRes)(equalTo(1)) &&
+        assert(fromState)(equalTo(1))
       }).provideSomeLayer[TestEnvironment](layer)
     }
   )
@@ -48,19 +54,24 @@ class CounterCommandHandler {
   type EIO[Result] = Combinators.EIO[Int, CountEvent, String, Result]
 
   @MethodId(1)
-  def increase(number: Int): EIO[Int] = read[Int, CountEvent, String]
-    .tap { _ =>
-      append(CountIncremented(number))
+  def increase(number: Int): EIO[Int] = combinators { c =>
+    c.read flatMap { res =>
+      c.append(CountIncremented(number)).as(res + number)
     }
+  }
 
   @MethodId(2)
-  def decrease(number: Int): EIO[Int] =
-    read[Int, CountEvent, String] tap { _ =>
-      append(CountIncremented(number))
+  def decrease(number: Int): EIO[Int] = combinators { c =>
+    c.read flatMap { res =>
+      c.append(CountDecremented(number)).as(res - number)
     }
+  }
 
   @MethodId(3)
-  def noop: EIO[Unit] = ignore
+  def noop: EIO[Unit] = combinators(_.ignore)
+
+  @MethodId(4)
+  def getValue: EIO[Int] = combinators(_.read)
 }
 
 object CounterEntity {
