@@ -10,26 +10,26 @@ trait AbstractRuntime {
   ): ZIO[R, Reject, Result]
 }
 
-trait KeyDecoder[A] {
+trait StringDecoder[A] {
   def apply(key: String): Option[A]
 
   final def decode(key: String): Option[A] = apply(key)
 }
 
-object KeyDecoder {
-  def apply[A: KeyDecoder]: KeyDecoder[A] = implicitly[KeyDecoder[A]]
+object StringDecoder {
+  def apply[A: StringDecoder]: StringDecoder[A] = implicitly[StringDecoder[A]]
 
-  implicit val stringKeyDecoder: KeyDecoder[String] = (a: String) => Some(a)
+  implicit val stringDecoder: StringDecoder[String] = (a: String) => Some(a)
 }
 
-trait KeyEncoder[A] {
+trait StringEncoder[A] {
   def apply(a: A): String
 
   final def encode(a: A): String = apply(a)
 }
 
-object KeyEncoder {
-  def apply[A: KeyEncoder]: KeyEncoder[A] = implicitly[KeyEncoder[A]]
+object StringEncoder {
+  def apply[A: StringEncoder]: StringEncoder[A] = implicitly[StringEncoder[A]]
 
-  implicit val stringKeyEncoder: KeyEncoder[String] = (a: String) => a
+  implicit val stringEncoder: StringEncoder[String] = (a: String) => a
 }

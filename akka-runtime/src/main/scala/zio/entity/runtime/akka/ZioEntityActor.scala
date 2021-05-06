@@ -3,7 +3,7 @@ package zio.entity.runtime.akka
 import akka.actor.{Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status}
 import akka.cluster.sharding.ShardRegion
 import izumi.reflect.Tag
-import zio.entity.core.{AlgebraCombinatorConfig, Combinators, Fold, KeyDecoder, KeyedAlgebraCombinators}
+import zio.entity.core.{AlgebraCombinatorConfig, Combinators, Fold, KeyedAlgebraCombinators, StringDecoder}
 import zio.entity.data.{CommandInvocation, CommandResult, Invocation, StemProtocol}
 import zio.{Has, Runtime, ULayer}
 
@@ -11,14 +11,14 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 object ZioEntityActor {
-  def props[Key: KeyDecoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+  def props[Key: StringDecoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
   )(implicit protocol: StemProtocol[Algebra, State, Event, Reject]): Props =
     Props(new ZioEntityActor[Key, Algebra, State, Event, Reject](eventSourcedBehaviour, algebraCombinatorConfig))
 }
 
-private class ZioEntityActor[Key: KeyDecoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
   eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
   algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
 )(implicit protocol: StemProtocol[Algebra, State, Event, Reject])
@@ -29,7 +29,7 @@ private class ZioEntityActor[Key: KeyDecoder: Tag, Algebra, State: Tag, Event: T
   private val keyString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
 
-  private val key: Key = KeyDecoder[Key]
+  private val key: Key = StringDecoder[Key]
     .decode(keyString)
     .getOrElse {
       val error = s"Failed to decode entity id from [$keyString]"

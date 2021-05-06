@@ -40,9 +40,13 @@ The library will distribute the request in the cluster and serialize commands us
 The optional annotation `@MethodId` can be used to maintain schema compatibility if method is renamed.
 The id used will be the unique number set in the annotation.
 
+### ZIO Stream ReadSide
+
 ### Pluggable Runtimes
 
 ### Replaceable storage
+The log and snapshot stores can be easily configured with implementations available like Memory, Postgres and Cassandra
 
 ### Testable in milliseconds
+Being part of ZIO ecosystem and using ZIO Stream, tests can be easy, quick and deterministic, no more eventually, no more flakyness.
 

@@ -15,7 +15,7 @@ object LocalRuntimeWithProtocol extends AbstractRuntime {
     fn(algebra).provideSomeLayer[R](Combinators.clientEmptyCombinator[State, Event, Reject])
   }
 
-  def entityLive[Key: KeyDecoder: KeyEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+  def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
@@ -38,7 +38,7 @@ object LocalRuntimeWithProtocol extends AbstractRuntime {
     } yield algebra
   }
 
-  def memory[Key: KeyDecoder: KeyEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+  def memory[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit

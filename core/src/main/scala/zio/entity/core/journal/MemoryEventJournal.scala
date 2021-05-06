@@ -51,7 +51,7 @@ class MemoryEventJournal[Key, Event](
       } *> internalQueue.offerAll(events.map(ev => key -> ev)).unit
     }
 
-  override def read(key: Key, offset: Long): stream.Stream[Nothing, EntityEvent[Key, Event]] = {
+  override def read(key: Key, offset: Long): stream.Stream[Throwable, EntityEvent[Key, Event]] = {
     val a: UIO[List[EntityEvent[Key, Event]]] = internal
       .map(_.getOrElse(key, Chunk.empty).toList.drop(offset.toInt).map { case (index, event, _) =>
         EntityEvent(key, index, event)

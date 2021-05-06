@@ -9,7 +9,7 @@ import izumi.reflect.Tag
 import scodec.bits.BitVector
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.core.{AbstractRuntime, AlgebraCombinatorConfig, Combinators, KeyAlgebraSender, KeyDecoder, KeyEncoder}
+import zio.entity.core.{AbstractRuntime, AlgebraCombinatorConfig, Combinators, KeyAlgebraSender, StringDecoder, StringEncoder}
 import zio.entity.data.{CommandInvocation, StemProtocol, Tagging, Versioned}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
@@ -33,7 +33,7 @@ object Runtime extends AbstractRuntime {
     actorSystem and readSideSettings and runtimeSettings
   }
 
-  def entityLive[Key: KeyDecoder: KeyEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+  def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
@@ -56,7 +56,7 @@ object Runtime extends AbstractRuntime {
     } yield algebra
   }
 
-  def memory[Key: KeyDecoder: KeyEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+  def memory[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
@@ -70,7 +70,7 @@ object Runtime extends AbstractRuntime {
       .provideSomeLayer[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]]](memoryEventJournalOffsetStore and snapshotKeyValueStore)
   }
 
-  def buildEntity[Key: KeyDecoder: KeyEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+  def buildEntity[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
@@ -101,7 +101,7 @@ object Runtime extends AbstractRuntime {
       extractShardId = extractShardId
     )
 
-    val keyEncoder = KeyEncoder[Key]
+    val keyEncoder = StringEncoder[Key]
 
     // macro that creates bytes when method is invoked
     KeyAlgebraSender.keyToAlgebra(
