@@ -3,6 +3,7 @@ package zio.entity.test
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.duration.durationInt
+import zio.entity.core.LocalRuntimeWithProtocol.Entity
 import zio.entity.core._
 import zio.entity.core.journal.{CommittableJournalQuery, MemoryEventJournal}
 import zio.entity.core.snapshot.{MemoryKeyValueStore, Snapshotting}
@@ -12,11 +13,11 @@ import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcessing, Read
 import zio.entity.test.EntityProbe.KeyedProbeOperations
 import zio.stream.ZStream
 import zio.test.environment.TestClock
-import zio.{Chunk, Fiber, Has, RIO, Ref, Tag, Task, UIO, URIO, ZIO, ZLayer}
+import zio.{Chunk, Fiber, Has, NeedsEnv, RIO, Ref, Tag, Task, UIO, URIO, ZIO, ZLayer}
 
 object TestEntityRuntime extends AbstractRuntime {
 
-  type Entity[Algebra, Key, State, Event, Reject] = Key => Algebra
+  type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
 
   object TestReadSideProcessor {
     trait TestReadSideProcessor[Reject] {
@@ -62,13 +63,20 @@ object TestEntityRuntime extends AbstractRuntime {
   }
 
   type TestEntity[Key, Algebra, State, Event, Reject] =
-    Has[Key => Algebra] with Has[EntityProbe[Key, State, Event]]
+    Has[Entity[Key, Algebra, State, Event, Reject]] with Has[EntityProbe[Key, State, Event]]
 
-  def call[R <: Has[_], Algebra, Key, Event: Tag, State: Tag, Reject: Tag, Result](key: Key, processor: Entity[Algebra, Key, State, Event, Reject])(
-    fn: Algebra => ZIO[R with Has[Combinators[State, Event, Reject]], Reject, Result]
-  ): ZIO[R, Reject, Result] = {
-    val algebra = processor(key)
-    fn(algebra).provideSomeLayer[R](Combinators.clientEmptyCombinator[State, Event, Reject])
+  def testEntityWithProbes[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]: URIO[Has[Entity[Key, Algebra, State, Event, Reject]] with Has[
+    EntityProbe[Key, State, Event]
+  ], (Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event])] =
+    ZIO.services[Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event]]
+
+  def call[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
+    key: Key,
+    processor: Entity[Key, Algebra, State, Event, Reject]
+  )(
+    fn: Algebra => ZIO[R, Reject, Result]
+  )(implicit ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = {
+    LocalRuntimeWithProtocol.call[R, Key, Algebra, Event, State, Reject, Result](key, processor)(fn)
   }
 
   def testEntity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag](

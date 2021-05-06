@@ -15,6 +15,7 @@ object Combinators {
   type EIO[State, Event, Reject, Result] = ZIO[Has[Combinators[State, Event, Reject]], Reject, Result]
   type ETask[State, Event, Result] = ZIO[Has[Combinators[State, Event, Throwable]], Throwable, Result]
 
+  //TODO: use same technique in ZIO to avoid repeating type params... new ZIO.provideSomeLayer...
   def read[State: Tag, Event: Tag, Reject: Tag]: ZIO[Has[Combinators[State, Event, Reject]], Reject, State] =
     ZIO.accessM[Has[Combinators[State, Event, Reject]]](_.get.read)
 

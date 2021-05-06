@@ -1,16 +1,43 @@
 package zio.entity.core
 
-import zio.UIO
+import zio.duration.durationInt
 import zio.entity.core.Combinators._
+import zio.entity.core.CounterEntity._
 import zio.entity.core.Fold.impossible
+import zio.entity.core.journal.MemoryEventJournal
+import zio.entity.core.snapshot.Snapshotting
+import zio.entity.data.Tagging.Const
 import zio.entity.data.{EventTag, StemProtocol, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.macros.annotations.MethodId
+import zio.entity.test.TestEntityRuntime._
+import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
-import zio.test.{DefaultRunnableSpec, ZSpec}
+import zio.test.{assert, DefaultRunnableSpec, ZSpec}
+import zio.{UIO, ZLayer}
 
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
-  override def spec: ZSpec[TestEnvironment, Any] = ???
+
+  private val layer = ZLayer.succeed(Snapshotting.disabled[String, Int]) and
+    MemoryEventJournal.make[String, CountEvent](300.millis).toLayer to
+    testEntity(CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+
+  override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
+    testM("receives commands, produces events and updates state") {
+      (for {
+        (counter, probe) <- testEntityWithProbes[String, CounterCommandHandler, Int, CountEvent, String]
+        res <- call("key", counter)(
+          _.increase(3)
+        )
+        events <- probe("key").events
+        state  <- probe("key").state
+      } yield {
+        assert(res)(equalTo(3)) &&
+        assert(events)(equalTo(List(CountIncremented(3))))
+        assert(state)(equalTo(3))
+      }).provideSomeLayer[TestEnvironment](layer)
+    }
+  )
 }
 
 sealed trait CountEvent
@@ -39,6 +66,8 @@ class CounterCommandHandler {
 object CounterEntity {
   type Counters = String => CounterCommandHandler
 
+  val tagging: Const[String] = Tagging.const[String](EventTag("Counter"))
+
   val eventHandlerLogic: Fold[Int, CountEvent] = Fold(
     initial = 0,
     reduce = {
@@ -50,8 +79,6 @@ object CounterEntity {
 
   implicit val counterProtocol: StemProtocol[CounterCommandHandler, Int, CountEvent, String] =
     RpcMacro.derive[CounterCommandHandler, Int, CountEvent, String]
-
-  val tagging: Tagging.Const[Any] = Tagging.const(EventTag("Counter"))
 
   val live = LocalRuntimeWithProtocol
     .memory[String, CounterCommandHandler, Int, CountEvent, String](

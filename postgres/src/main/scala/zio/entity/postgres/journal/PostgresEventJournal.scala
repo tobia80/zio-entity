@@ -19,7 +19,7 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
   clock: Clock.Service
 ) extends EventJournal[Key, Event]
     with JournalQuery[Long, Key, Event] {
-  // table per entity, use a
+  // table per entity
   import MyPostgresContext._
 
   type Record = (Chunk[Byte], Long, Chunk[Byte], List[String])
@@ -32,10 +32,9 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
       val transformedEvents: Chunk[Record] = events.zipWithIndex.map { case (el, index) =>
         (SchemaEncoder[Key].encode(key), offset + index, SchemaCodec[Event].encode(el), tags)
       }
-      val a = quote {
+      run(quote {
         liftQuery(transformedEvents).foreach(e => query[Record].insert(e))
-      }
-      run(a).unit.provideLayer(layer)
+      }).unit.provideLayer(layer)
     }
   }
 
@@ -43,13 +42,12 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
     // query with sequence number bigger than offset
     //TODO change error type to Throwable
     val keyBytes: Chunk[Byte] = SchemaEncoder[Key].encode(key)
-    val a = quote {
+    val valueDecoder = SchemaCodec[Event]
+    stream(quote {
       query[Record].filter { case (key, recordOffset, _, _) =>
         key == lift(keyBytes) && recordOffset >= lift(offset)
       }
-    }
-    val valueDecoder = SchemaCodec[Event]
-    stream(a).provideLayer(layer).mapM { case (_, recordOffset, event, _) =>
+    }).provideLayer(layer).mapM { case (_, recordOffset, event, _) =>
       val eventZio: Task[Event] = ZIO.fromTry(valueDecoder.decode(event))
       eventZio.map(event => EntityEvent(key, recordOffset, event))
     }
@@ -68,14 +66,13 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
   override def currentEventsByTag(tag: EventTag, offset: Option[Long]): zio.stream.Stream[Throwable, JournalEntry[Long, Key, Event]] = {
     val offsetValue = offset.getOrElse(0L)
     val tagValue = tag.value
-    val a = quote {
+    val valueDecoder = SchemaCodec[Event]
+    val keyDecoder = SchemaCodec[Key]
+    stream(quote {
       query[Record].filter { case (key, recordOffset, _, tags) =>
         recordOffset >= lift(offsetValue) && tags.contains(lift(tagValue))
       }
-    }
-    val valueDecoder = SchemaCodec[Event]
-    val keyDecoder = SchemaCodec[Key]
-    stream(a).provideLayer(layer).mapM { case (keyBytes, recordOffset, eventBytes, tags) =>
+    }).provideLayer(layer).mapM { case (keyBytes, recordOffset, eventBytes, tags) =>
       for {
         key   <- ZIO.fromTry(keyDecoder.decode(keyBytes))
         event <- ZIO.fromTry(valueDecoder.decode(eventBytes))

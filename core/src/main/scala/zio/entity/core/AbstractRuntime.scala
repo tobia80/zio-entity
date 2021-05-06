@@ -5,9 +5,14 @@ import zio.{Has, Tag, ZIO}
 trait AbstractRuntime {
   type Entity[Algebra, Key, State, Event, Reject]
 
-  def call[R <: Has[_], Algebra, Key, Event: Tag, State: Tag, Reject: Tag, Result](key: Key, processor: Entity[Algebra, Key, State, Event, Reject])(
-    fn: Algebra => ZIO[R with Has[Combinators[State, Event, Reject]], Reject, Result]
-  ): ZIO[R, Reject, Result]
+  //TODO create a version of call that accepts an env
+  def call[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
+    key: Key,
+    processor: Entity[Key, Algebra, State, Event, Reject]
+  )(
+    fn: Algebra => ZIO[R, Reject, Result]
+  )(implicit ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result]
+
 }
 
 trait StringDecoder[A] {

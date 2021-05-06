@@ -13,11 +13,12 @@ import zio.entity.core.{AbstractRuntime, AlgebraCombinatorConfig, Combinators, K
 import zio.entity.data.{CommandInvocation, StemProtocol, Tagging, Versioned}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
+import zio.entity.test.TestEntityRuntime.Entity
 import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
 
 object Runtime extends AbstractRuntime {
 
-  type Entity[Algebra, Key, State, Event, Reject] = Key => Algebra
+  type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
 
   case class KeyedCommand(key: String, bytes: BitVector) extends Message
 
@@ -114,10 +115,13 @@ object Runtime extends AbstractRuntime {
       eventSourcedBehaviour.errorHandler
     )
   }
-  def call[R <: Has[_], Algebra, Key, Event: Tag, State: Tag, Reject: Tag, Result](key: Key, processor: Key => Algebra)(
-    fn: Algebra => ZIO[R with Has[Combinators[State, Event, Reject]], Reject, Result]
-  ): ZIO[R, Reject, Result] = {
+  def call[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
+    key: Key,
+    processor: Entity[Key, Algebra, State, Event, Reject]
+  )(
+    fn: Algebra => ZIO[R, Reject, Result]
+  )(implicit ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = {
     val algebra = processor(key)
-    fn(algebra).provideSomeLayer[R](Combinators.clientEmptyCombinator[State, Event, Reject])
+    fn(algebra).provideLayer(Combinators.clientEmptyCombinator[State, Event, Reject])
   }
 }

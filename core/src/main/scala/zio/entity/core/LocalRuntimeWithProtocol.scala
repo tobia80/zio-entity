@@ -3,17 +3,11 @@ package zio.entity.core
 import scodec.bits.BitVector
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.{Has, Ref, Tag, UIO, ZIO, ZLayer}
+import zio.{Has, NeedsEnv, Ref, Tag, UIO, ZIO, ZLayer}
 import zio.entity.data.{CommandResult, StemProtocol, Tagging, Versioned}
+import zio.entity.test.TestEntityRuntime.Entity
 
 object LocalRuntimeWithProtocol extends AbstractRuntime {
-
-  def call[R <: Has[_], Algebra, Key, Event: Tag, State: Tag, Reject: Tag, Result](key: Key, processor: Entity[Algebra, Key, State, Event, Reject])(
-    fn: Algebra => ZIO[R with Has[Combinators[State, Event, Reject]], Reject, Result]
-  ): ZIO[R, Reject, Result] = {
-    val algebra = processor(key)
-    fn(algebra).provideSomeLayer[R](Combinators.clientEmptyCombinator[State, Event, Reject])
-  }
 
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
@@ -87,6 +81,15 @@ object LocalRuntimeWithProtocol extends AbstractRuntime {
     }
   }
 
-  type Entity[Algebra, Key, State, Event, Reject] = Key => Algebra
+  type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
 
+  override def call[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
+    key: Key,
+    processor: Entity[Key, Algebra, State, Event, Reject]
+  )(
+    fn: Algebra => ZIO[R, Reject, Result]
+  )(implicit ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = {
+    val algebra = processor(key)
+    fn(algebra).provideLayer(Combinators.clientEmptyCombinator[State, Event, Reject])
+  }
 }
