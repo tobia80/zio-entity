@@ -9,7 +9,7 @@ import izumi.reflect.Tag
 import scodec.bits.BitVector
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.core.{AbstractRuntime, AlgebraCombinatorConfig, Combinators, KeyAlgebraSender, StringDecoder, StringEncoder}
+import zio.entity.core.{AbstractRuntime, AlgebraCombinatorConfig, Combinators, EntityBase, KeyAlgebraSender, StringDecoder, StringEncoder}
 import zio.entity.data.{CommandInvocation, StemProtocol, Tagging, Versioned}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
@@ -42,7 +42,7 @@ object Runtime extends AbstractRuntime {
     protocol: StemProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[KeyValueStore[Key, Long]] with Has[KeyValueStore[Key, Versioned[State]]] with Has[
     EventJournal[Key, Event]
-  ], Throwable, Key => Algebra] = {
+  ], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = {
     for {
       eventJournal          <- ZIO.service[EventJournal[Key, Event]]
       snapshotKeyValueStore <- ZIO.service[KeyValueStore[Key, Versioned[State]]]
@@ -63,7 +63,7 @@ object Runtime extends AbstractRuntime {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: StemProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]], Throwable, Key => Algebra] = {
+  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = {
     val memoryEventJournalOffsetStore = MemoryKeyValueStore.make[Key, Long].toLayer
     val snapshotKeyValueStore = MemoryKeyValueStore.make[Key, Versioned[State]].toLayer
 
@@ -77,7 +77,7 @@ object Runtime extends AbstractRuntime {
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
   )(implicit
     protocol: StemProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings], Throwable, Key => Algebra] = ZIO.access { layer =>
+  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = ZIO.access { layer =>
     val system = layer.get[ActorSystem]
     val settings = layer.get[RuntimeSettings]
     val props = ZioEntityActor.props[Key, Algebra, State, Event, Reject](eventSourcedBehaviour, algebraCombinatorConfig)
@@ -113,7 +113,7 @@ object Runtime extends AbstractRuntime {
         }
       },
       eventSourcedBehaviour.errorHandler
-    )
+    )(protocol, implicitly[Tag[State]], implicitly[Tag[Event]], implicitly[Tag[Reject]])
   }
   def keyedEntity[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
     key: Key,

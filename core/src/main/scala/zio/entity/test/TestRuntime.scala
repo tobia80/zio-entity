@@ -62,20 +62,11 @@ object TestEntityRuntime extends AbstractRuntime {
   }
 
   type TestEntity[Key, Algebra, State, Event, Reject] =
-    Has[Entity[Key, Algebra, State, Event, Reject]] with Has[EntityProbe[Key, State, Event]]
+    Has[EntityBase[Key, Algebra, State, Event, Reject]] with Has[EntityProbe[Key, State, Event]]
 
   def testEntityWithProbes[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
-    : URIO[TestEntity[Key, Algebra, State, Event, Reject], (Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event])] =
-    ZIO.services[Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event]]
-
-  def keyedEntity[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
-    key: Key,
-    processor: Entity[Key, Algebra, State, Event, Reject]
-  )(
-    fn: Algebra => ZIO[R, Reject, Result]
-  )(implicit ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = {
-    LocalRuntimeWithProtocol.keyedEntity[R, Key, Algebra, Event, State, Reject, Result](key, processor)(fn)
-  }
+    : URIO[TestEntity[Key, Algebra, State, Event, Reject], (EntityBase[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event])] =
+    ZIO.services[EntityBase[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event]]
 
   def testEntity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
@@ -86,19 +77,20 @@ object TestEntityRuntime extends AbstractRuntime {
     EntityProbe.make[Key, State, Event](eventSourcedBehaviour.eventHandler).toLayer and ZLayer
       .service[MemoryEventJournal[Key, Event]] and ZLayer
       .service[Snapshotting[Key, State]] to {
-      val entityBuilder = for {
-        memoryEventJournal            <- ZIO.service[MemoryEventJournal[Key, Event]]
-        snapshotting                  <- ZIO.service[Snapshotting[Key, State]]
-        memoryEventJournalOffsetStore <- MemoryKeyValueStore.make[Key, Long]
-        baseAlgebraConfig = AlgebraCombinatorConfig.build[Key, State, Event](
-          memoryEventJournalOffsetStore,
-          tagging,
-          memoryEventJournal,
-          snapshotting
-        )
-        cache       <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
-        localEntity <- LocalRuntimeWithProtocol.buildLocalEntity(eventSourcedBehaviour, baseAlgebraConfig, cache)
-      } yield localEntity
+      val entityBuilder: ZIO[Has[Snapshotting[Key, State]] with Has[MemoryEventJournal[Key, Event]], Nothing, EntityBase[Key, Algebra, State, Event, Reject]] =
+        for {
+          memoryEventJournal            <- ZIO.service[MemoryEventJournal[Key, Event]]
+          snapshotting                  <- ZIO.service[Snapshotting[Key, State]]
+          memoryEventJournalOffsetStore <- MemoryKeyValueStore.make[Key, Long]
+          baseAlgebraConfig = AlgebraCombinatorConfig.build[Key, State, Event](
+            memoryEventJournalOffsetStore,
+            tagging,
+            memoryEventJournal,
+            snapshotting
+          )
+          cache       <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
+          localEntity <- LocalRuntimeWithProtocol.buildLocalEntity(eventSourcedBehaviour, baseAlgebraConfig, cache)
+        } yield localEntity
       (for {
         entity <- entityBuilder
         probe  <- ZIO.service[EntityProbe[Key, State, Event]]

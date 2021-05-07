@@ -26,14 +26,14 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
     testM("receives commands, produces events and updates state") {
       (for {
         (counter, probe) <- testEntityWithProbes[String, CounterCommandHandler, Int, CountEvent, String]
-        res <- keyedEntity("key", counter)(
+        res <- counter("key")(
           _.increase(3)
         )
-        finalRes <- keyedEntity("key", counter)(
+        finalRes <- counter("key")(
           _.decrease(2)
         )
         events <- probe("key").events
-        fromState <- keyedEntity("key", counter)(
+        fromState <- counter("key")(
           _.getValue
         )
       } yield {

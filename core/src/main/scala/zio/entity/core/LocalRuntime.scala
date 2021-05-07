@@ -6,15 +6,6 @@ object LocalRuntime extends AbstractRuntime {
 
   type Entity[Key, Algebra, State, Event, Reject] = Key => (Algebra, Combinators[State, Event, Reject])
 
-  def keyedEntity[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
-    key: Key,
-    processor: Entity[Key, Algebra, State, Event, Reject]
-  )(
-    fn: Algebra => ZIO[R, Reject, Result]
-  )(implicit ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = {
-    val (algebra, combinators) = processor(key)
-    fn(algebra).provideLayer(ZLayer.succeed(combinators))
-  }
   // build a key => algebra transformed with key
   def buildLocalEntity[Algebra, Key: Tag, Event: Tag, State: Tag, Reject: Tag](
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
