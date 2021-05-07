@@ -5,7 +5,7 @@ import akka.cluster.sharding.ClusterSharding
 import akka.pattern.{ask, BackoffOpts, BackoffSupervisor}
 import akka.util.Timeout
 import zio.entity.readside.{KillSwitch, ReadSideProcess, ReadSideProcessing}
-import zio.entity.runtime.akka.readside.ReadSideWorkerActor.KeepRunning
+import zio.entity.runtime.akka.readside.ReadSideWorkerActor.KeepRunningWithWorker
 import zio.{Task, ZIO}
 
 import java.net.URLEncoder
@@ -41,12 +41,12 @@ final class ActorReadSideProcessing private (system: ActorSystem, settings: Read
           typeName = name,
           entityProps = props,
           settings = settings.clusterShardingSettings,
-          extractEntityId = { case c @ KeepRunning(workerId) =>
+          extractEntityId = { case c @ KeepRunningWithWorker(workerId) =>
             (workerId.toString, c)
           },
           extractShardId = {
-            case KeepRunning(workerId) => (workerId % settings.numberOfShards).toString
-            case other                 => throw new IllegalArgumentException(s"Unexpected message [$other]")
+            case KeepRunningWithWorker(workerId) => (workerId % settings.numberOfShards).toString
+            case other                           => throw new IllegalArgumentException(s"Unexpected message [$other]")
           }
         )
 

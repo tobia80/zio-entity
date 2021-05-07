@@ -1,43 +1,41 @@
-package zio.entity.core
+package zio.entity.runtime.akka
 
+import zio.UIO
 import zio.duration.durationInt
-import zio.entity.core.Combinators._
-import zio.entity.core.CounterEntity._
+import zio.entity.core.Combinators.combinators
 import zio.entity.core.Fold.impossible
-import zio.entity.core.journal.MemoryEventJournal
-import zio.entity.core.snapshot.Snapshotting
+import zio.entity.core.journal.{EventJournal, MemoryEventJournal}
+import zio.entity.core.{Combinators, EventSourcedBehaviour, Fold}
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{EventTag, StemProtocol, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.macros.annotations.MethodId
-import zio.entity.test.TestEntityRuntime._
+import zio.entity.runtime.akka.CounterEntity._
+import zio.entity.test.TestEntityRuntime.entity
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{UIO, ZLayer}
 
-object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
+object RuntimeSpec extends DefaultRunnableSpec {
 
-  private val layer = ZLayer.succeed(Snapshotting.disabled[String, Int]) and
-    MemoryEventJournal.make[String, CountEvent](300.millis).toLayer to
-    testEntity(CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+  private val layer = (Runtime.actorSettings("Test") and
+    MemoryEventJournal.make[String, CountEvent](300.millis).toLayer[EventJournal[String, CountEvent]]) to
+    Runtime.memory("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage)).toLayer
 
-  override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
-    testM("receives commands, produces events and updates state") {
+  override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with Akka Runtime")(
+    testM("receives commands and updates state") {
       (for {
-        (counter, probe) <- testEntityWithProbes[String, CounterCommandHandler, Int, CountEvent, String]
+        counter <- entity[String, CounterCommandHandler, Int, CountEvent, String]
         res <- counter("key")(
           _.increase(3)
         )
         finalRes <- counter("key")(
           _.decrease(2)
         )
-        events <- probe("key").events
         fromState <- counter("key")(
           _.getValue
         )
       } yield {
-        assert(events)(equalTo(List(CountIncremented(3), CountDecremented(2)))) &&
         assert(res)(equalTo(3)) &&
         assert(finalRes)(equalTo(1)) &&
         assert(fromState)(equalTo(1))

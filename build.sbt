@@ -37,10 +37,11 @@ val postgresDeps = Seq(
 )
 
 val akkaDeps = Seq(
-  "com.typesafe.akka" %% "akka-cluster-sharding" % "2.5.32",
-  "com.typesafe.akka" %% "akka-cluster" % "2.5.32",
+  "com.typesafe.akka" %% "akka-cluster-sharding" % "2.6.14",
+  "com.typesafe.akka" %% "akka-cluster" % "2.6.14",
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
-)
+) ++ testDeps
+
 lazy val commonProtobufSettings = Seq(
   Compile / PB.targets := Seq(
     scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
@@ -53,6 +54,7 @@ lazy val commonProtobufSettings = Seq(
 def module(id: String, path: String, description: String): Project =
   Project(id, file(path))
     .settings(moduleName := id, name := description)
+    .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
 
 lazy val `core` = module("zio-entity-core", "core", "Core library")
   .settings(libraryDependencies ++= allDeps)

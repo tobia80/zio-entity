@@ -62,6 +62,10 @@ object TestEntityRuntime {
   type TestEntity[Key, Algebra, State, Event, Reject] =
     Has[Entity[Key, Algebra, State, Event, Reject]] with Has[EntityProbe[Key, State, Event]]
 
+  def entity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
+    : URIO[Has[Entity[Key, Algebra, State, Event, Reject]], Entity[Key, Algebra, State, Event, Reject]] =
+    ZIO.service[Entity[Key, Algebra, State, Event, Reject]]
+
   def testEntityWithProbes[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
     : URIO[TestEntity[Key, Algebra, State, Event, Reject], (Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event])] =
     ZIO.services[Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event]]

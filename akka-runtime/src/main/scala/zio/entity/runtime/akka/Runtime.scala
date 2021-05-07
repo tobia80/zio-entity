@@ -7,9 +7,9 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import izumi.reflect.Tag
 import scodec.bits.BitVector
+import zio.entity.core._
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.core._
 import zio.entity.data.{CommandInvocation, StemProtocol, Tagging, Versioned}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
@@ -19,7 +19,7 @@ object Runtime {
 
   case class KeyedCommand(key: String, bytes: BitVector) extends Message
 
-  def actorSystemLayer(name: String, confFileName: String = "stem.conf"): ZLayer[Any, Throwable, Has[ActorSystem]] =
+  def actorSystemLayer(name: String, confFileName: String = "entity.conf"): ZLayer[Any, Throwable, Has[ActorSystem]] =
     ZLayer.fromManaged(
       Managed.make(ZIO.effect(ActorSystem(name, ConfigFactory.load(confFileName))))(sys => Task.fromFuture(_ => sys.terminate()).either)
     )

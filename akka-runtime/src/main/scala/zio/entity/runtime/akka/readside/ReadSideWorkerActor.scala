@@ -3,7 +3,7 @@ package zio.entity.runtime.akka.readside
 import akka.actor.{Actor, ActorLogging, Props, Status}
 import akka.pattern._
 import zio.entity.readside.{ReadSideProcess, RunningProcess}
-import zio.entity.runtime.akka.readside.ReadSideWorkerActor.KeepRunning
+import zio.entity.runtime.akka.readside.ReadSideWorkerActor.KeepRunningWithWorker
 import zio.entity.runtime.akka.readside.serialization.ReadSideMessage
 import zio.{Runtime, Task}
 
@@ -11,7 +11,7 @@ object ReadSideWorkerActor {
   def props(processWithId: Int => ReadSideProcess, processName: String)(implicit runtime: Runtime[Any]): Props =
     Props(new ReadSideWorkerActor(processWithId, processName))
 
-  final case class KeepRunning(workerId: Int) extends ReadSideMessage
+  final case class KeepRunningWithWorker(workerId: Int) extends ReadSideMessage
 
 }
 
@@ -33,7 +33,7 @@ final class ReadSideWorkerActor(
   override def postStop(): Unit =
     killSwitch.foreach(el => runtime.unsafeRun(el))
 
-  def receive: Receive = { case KeepRunning(workerId) =>
+  def receive: Receive = { case KeepRunningWithWorker(workerId) =>
     log.info("[{}] Starting process {}", workerId, processName)
     runtime.unsafeRunToFuture(
       processFor(workerId).run
@@ -55,7 +55,7 @@ final class ReadSideWorkerActor(
       case Status.Failure(e) =>
         log.error(e, "Process failed to start {}", processName)
         throw e
-      case KeepRunning(_) => ()
+      case KeepRunningWithWorker(_) => ()
     }
   }
 }
