@@ -10,9 +10,9 @@ object KeyAlgebraSender {
     stateTag: Tag[State],
     eventTag: Tag[Event],
     rejectTag: Tag[Reject]
-  ): EntityBase[Key, Algebra, State, Event, Reject] = {
+  ): Entity[Key, Algebra, State, Event, Reject] = {
 
-    new EntityBase[Key, Algebra, State, Event, Reject] {
+    new Entity[Key, Algebra, State, Event, Reject] {
       val fn: Key => Algebra = { key: Key =>
         {
           // implementation of algebra that transform the method in bytes inject the function in it

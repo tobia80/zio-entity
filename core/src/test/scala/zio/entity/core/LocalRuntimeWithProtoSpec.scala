@@ -14,7 +14,7 @@ import zio.entity.test.TestEntityRuntime._
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{UIO, ZIO, ZLayer}
+import zio.{UIO, ZLayer}
 
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 

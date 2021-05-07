@@ -17,8 +17,6 @@ import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
 
 object Runtime {
 
-  type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
-
   case class KeyedCommand(key: String, bytes: BitVector) extends Message
 
   def actorSystemLayer(name: String, confFileName: String = "stem.conf"): ZLayer[Any, Throwable, Has[ActorSystem]] =
@@ -41,7 +39,7 @@ object Runtime {
     protocol: StemProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[KeyValueStore[Key, Long]] with Has[KeyValueStore[Key, Versioned[State]]] with Has[
     EventJournal[Key, Event]
-  ], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = {
+  ], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
       eventJournal          <- ZIO.service[EventJournal[Key, Event]]
       snapshotKeyValueStore <- ZIO.service[KeyValueStore[Key, Versioned[State]]]
@@ -62,7 +60,7 @@ object Runtime {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: StemProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     val memoryEventJournalOffsetStore = MemoryKeyValueStore.make[Key, Long].toLayer
     val snapshotKeyValueStore = MemoryKeyValueStore.make[Key, Versioned[State]].toLayer
 
@@ -76,7 +74,7 @@ object Runtime {
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
   )(implicit
     protocol: StemProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = ZIO.access { layer =>
+  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings], Throwable, Entity[Key, Algebra, State, Event, Reject]] = ZIO.access { layer =>
     val system = layer.get[ActorSystem]
     val settings = layer.get[RuntimeSettings]
     val props = ZioEntityActor.props[Key, Algebra, State, Event, Reject](eventSourcedBehaviour, algebraCombinatorConfig)
@@ -113,14 +111,5 @@ object Runtime {
       },
       eventSourcedBehaviour.errorHandler
     )(protocol, implicitly[Tag[State]], implicitly[Tag[Event]], implicitly[Tag[Reject]])
-  }
-  def keyedEntity[R <: Has[_], Key, Algebra, Event: Tag, State: Tag, Reject: Tag, Result](
-    key: Key,
-    processor: Entity[Key, Algebra, State, Event, Reject]
-  )(
-    fn: Algebra => ZIO[R, Reject, Result]
-  )(implicit ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = {
-    val algebra = processor(key)
-    fn(algebra).provideLayer(Combinators.clientEmptyCombinator[State, Event, Reject])
   }
 }

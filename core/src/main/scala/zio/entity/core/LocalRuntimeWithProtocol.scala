@@ -15,7 +15,7 @@ object LocalRuntimeWithProtocol {
     protocol: StemProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[KeyValueStore[Key, Long]] with Has[KeyValueStore[Key, Versioned[State]]] with Has[
     EventJournal[Key, Event]
-  ], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = {
+  ], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
       eventJournal          <- ZIO.service[EventJournal[Key, Event]]
       snapshotKeyValueStore <- ZIO.service[KeyValueStore[Key, Versioned[State]]]
@@ -36,7 +36,7 @@ object LocalRuntimeWithProtocol {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: StemProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[EventJournal[Key, Event]], Throwable, EntityBase[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Has[EventJournal[Key, Event]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     val memoryEventJournalOffsetStore = MemoryKeyValueStore.make[Key, Long].toLayer
     val snapshotKeyValueStore = MemoryKeyValueStore.make[Key, Versioned[State]].toLayer
 
@@ -48,7 +48,7 @@ object LocalRuntimeWithProtocol {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event], //default combinator that tracks events and states
     combinatorMap: Ref[Map[Key, UIO[Combinators[State, Event, Reject]]]]
-  )(implicit protocol: StemProtocol[Algebra, State, Event, Reject]): UIO[EntityBase[Key, Algebra, State, Event, Reject]] = {
+  )(implicit protocol: StemProtocol[Algebra, State, Event, Reject]): UIO[Entity[Key, Algebra, State, Event, Reject]] = {
     val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
 // TODO in order to have an identity protocol, we need
     UIO.succeed(
@@ -80,7 +80,5 @@ object LocalRuntimeWithProtocol {
       )(protocol, implicitly[Tag[State]], implicitly[Tag[Event]], implicitly[Tag[Reject]])
     )
   }
-
-  type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
 
 }

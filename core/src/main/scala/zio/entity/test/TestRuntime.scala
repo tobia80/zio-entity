@@ -60,11 +60,11 @@ object TestEntityRuntime {
   }
 
   type TestEntity[Key, Algebra, State, Event, Reject] =
-    Has[EntityBase[Key, Algebra, State, Event, Reject]] with Has[EntityProbe[Key, State, Event]]
+    Has[Entity[Key, Algebra, State, Event, Reject]] with Has[EntityProbe[Key, State, Event]]
 
   def testEntityWithProbes[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
-    : URIO[TestEntity[Key, Algebra, State, Event, Reject], (EntityBase[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event])] =
-    ZIO.services[EntityBase[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event]]
+    : URIO[TestEntity[Key, Algebra, State, Event, Reject], (Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event])] =
+    ZIO.services[Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event]]
 
   def testEntity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
@@ -75,7 +75,7 @@ object TestEntityRuntime {
     EntityProbe.make[Key, State, Event](eventSourcedBehaviour.eventHandler).toLayer and ZLayer
       .service[MemoryEventJournal[Key, Event]] and ZLayer
       .service[Snapshotting[Key, State]] to {
-      val entityBuilder: ZIO[Has[Snapshotting[Key, State]] with Has[MemoryEventJournal[Key, Event]], Nothing, EntityBase[Key, Algebra, State, Event, Reject]] =
+      val entityBuilder: ZIO[Has[Snapshotting[Key, State]] with Has[MemoryEventJournal[Key, Event]], Nothing, Entity[Key, Algebra, State, Event, Reject]] =
         for {
           memoryEventJournal            <- ZIO.service[MemoryEventJournal[Key, Event]]
           snapshotting                  <- ZIO.service[Snapshotting[Key, State]]

@@ -67,3 +67,5 @@ lazy val `akka-runtime` = module("zio-entity-akkaruntime", "akka-runtime", "Akka
   .settings(commonProtobufSettings)
 
 aggregateProjects(`core`, `akka-runtime`, `postgres`)
+
+testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
