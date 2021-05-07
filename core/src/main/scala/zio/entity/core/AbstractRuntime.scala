@@ -2,11 +2,6 @@ package zio.entity.core
 
 import zio.{Has, Tag, ZIO}
 
-trait AbstractRuntime {
-  type Entity[Algebra, Key, State, Event, Reject]
-
-}
-
 trait StringDecoder[A] {
   def apply(key: String): Option[A]
 

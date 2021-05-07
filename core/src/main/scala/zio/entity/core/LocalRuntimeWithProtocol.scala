@@ -3,11 +3,10 @@ package zio.entity.core
 import scodec.bits.BitVector
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.{Has, NeedsEnv, Ref, Tag, UIO, ZIO, ZLayer}
 import zio.entity.data.{CommandResult, StemProtocol, Tagging, Versioned}
-import zio.entity.test.TestEntityRuntime.Entity
+import zio.{Has, Ref, Tag, UIO, ZIO}
 
-object LocalRuntimeWithProtocol extends AbstractRuntime {
+object LocalRuntimeWithProtocol {
 
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],

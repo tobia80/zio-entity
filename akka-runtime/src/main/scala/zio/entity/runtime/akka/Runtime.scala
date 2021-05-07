@@ -9,14 +9,13 @@ import izumi.reflect.Tag
 import scodec.bits.BitVector
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.core.{AbstractRuntime, AlgebraCombinatorConfig, Combinators, EntityBase, KeyAlgebraSender, StringDecoder, StringEncoder}
+import zio.entity.core._
 import zio.entity.data.{CommandInvocation, StemProtocol, Tagging, Versioned}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
-import zio.entity.test.TestEntityRuntime.Entity
 import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
 
-object Runtime extends AbstractRuntime {
+object Runtime {
 
   type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
 

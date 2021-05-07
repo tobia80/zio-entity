@@ -1,8 +1,8 @@
 package zio.entity.core
 
-import zio.{Has, Ref, Tag, UIO, ZIO, ZLayer}
+import zio.{Ref, Tag, UIO, ZIO}
 
-object LocalRuntime extends AbstractRuntime {
+object LocalRuntime {
 
   type Entity[Key, Algebra, State, Event, Reject] = Key => (Algebra, Combinators[State, Event, Reject])
 

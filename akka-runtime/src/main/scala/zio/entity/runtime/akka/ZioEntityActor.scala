@@ -3,7 +3,7 @@ package zio.entity.runtime.akka
 import akka.actor.{Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status}
 import akka.cluster.sharding.ShardRegion
 import izumi.reflect.Tag
-import zio.entity.core.{AlgebraCombinatorConfig, Combinators, Fold, KeyedAlgebraCombinators, StringDecoder}
+import zio.entity.core._
 import zio.entity.data.{CommandInvocation, CommandResult, Invocation, StemProtocol}
 import zio.{Has, Runtime, ULayer}
 
@@ -85,9 +85,3 @@ private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event
 }
 
 case object Stop
-
-case class EventSourcedBehaviour[Algebra, State, Event, Reject](
-  algebra: Algebra,
-  eventHandler: Fold[State, Event],
-  errorHandler: Throwable => Reject
-)

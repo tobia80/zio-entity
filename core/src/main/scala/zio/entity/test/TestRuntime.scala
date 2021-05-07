@@ -14,9 +14,7 @@ import zio.stream.ZStream
 import zio.test.environment.TestClock
 import zio.{Chunk, Fiber, Has, RIO, Ref, Tag, Task, UIO, URIO, ZIO, ZLayer}
 
-object TestEntityRuntime extends AbstractRuntime {
-
-  type Entity[Key, Algebra, State, Event, Reject] = Key => Algebra
+object TestEntityRuntime {
 
   object TestReadSideProcessor {
     trait TestReadSideProcessor[Reject] {
