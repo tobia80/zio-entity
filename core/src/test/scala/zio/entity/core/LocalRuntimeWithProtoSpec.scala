@@ -2,6 +2,7 @@ package zio.entity.core
 
 import zio.duration.durationInt
 import zio.entity.core.Combinators._
+import zio.entity.core.CounterCommandHandler.EIO
 import zio.entity.core.CounterEntity._
 import zio.entity.core.Fold.impossible
 import zio.entity.core.journal.MemoryEventJournal
@@ -18,14 +19,16 @@ import zio.{UIO, ZLayer}
 
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
+  private val counterCommandHandler: Counter = CounterCommandHandler
+
   private val layer = ZLayer.succeed(Snapshotting.disabled[String, Int]) and
     MemoryEventJournal.make[String, CountEvent](300.millis).toLayer to
-    testEntity(CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+    testEntity(CounterEntity.tagging, EventSourcedBehaviour(counterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
     testM("receives commands, produces events and updates state") {
       (for {
-        (counter, probe) <- testEntityWithProbes[String, CounterCommandHandler, Int, CountEvent, String]
+        (counter, probe) <- testEntityWithProbes[String, Counter, Int, CountEvent, String]
         res <- counter("key")(
           _.increase(3)
         )
@@ -58,32 +61,42 @@ sealed trait CountEvent
 case class CountIncremented(number: Int) extends CountEvent
 case class CountDecremented(number: Int) extends CountEvent
 
-class CounterCommandHandler {
+trait Counter {
+  @MethodId(1)
+  def increase(number: Int): EIO[Int]
+
+  @MethodId(2)
+  def decrease(number: Int): EIO[Int]
+
+  @MethodId(3)
+  def noop: EIO[Unit]
+
+  @MethodId(4)
+  def getValue: EIO[Int]
+}
+
+object CounterCommandHandler extends Counter {
   type EIO[Result] = Combinators.EIO[Int, CountEvent, String, Result]
 
-  @MethodId(1)
   def increase(number: Int): EIO[Int] = combinators { c =>
     c.read flatMap { res =>
       c.append(CountIncremented(number)).as(res + number)
     }
   }
 
-  @MethodId(2)
   def decrease(number: Int): EIO[Int] = combinators { c =>
     c.read flatMap { res =>
       c.append(CountDecremented(number)).as(res - number)
     }
   }
 
-  @MethodId(3)
   def noop: EIO[Unit] = combinators(_.ignore)
 
-  @MethodId(4)
   def getValue: EIO[Int] = combinators(_.read)
 }
 
 object CounterEntity {
-  type Counters = String => CounterCommandHandler
+  type Counters = String => Counter
 
   val tagging: Const[String] = Tagging.const[String](EventTag("Counter"))
 
@@ -96,7 +109,7 @@ object CounterEntity {
     }
   )
 
-  implicit val counterProtocol: EntityProtocol[CounterCommandHandler, Int, CountEvent, String] =
-    RpcMacro.derive[CounterCommandHandler, Int, CountEvent, String]
+  implicit val counterProtocol: EntityProtocol[Counter, Int, CountEvent, String] =
+    RpcMacro.derive[Counter, Int, CountEvent, String]
 
 }
