@@ -33,7 +33,7 @@ val allDeps = Seq(
 
 val postgresDeps = Seq(
   "org.postgresql" % "postgresql" % "42.2.8",
-  "io.getquill" %% "quill-jdbc-zio" % "3.7.0"
+  "io.getquill" %% "quill-jdbc-zio" % "3.7.1"
 )
 
 val akkaDeps = Seq(
