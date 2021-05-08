@@ -32,7 +32,7 @@ val allDeps = Seq(
 ) ++ testDeps
 
 val postgresDeps = Seq(
-  "org.postgresql" % "postgresql" % "42.2.8",
+  "org.postgresql" % "postgresql" % "42.2.20",
   "io.getquill" %% "quill-jdbc-zio" % "3.7.0"
 )
 
