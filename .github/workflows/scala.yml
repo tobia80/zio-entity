@@ -19,4 +19,6 @@ jobs:
         java-version: '11'
         distribution: 'adopt'
     - name: Run tests
-      run: sbt test
+      run: sbt test  
+    - name: Scala Steward Github Action
+      uses: scala-steward-org/scala-steward-action@v2.10.0
