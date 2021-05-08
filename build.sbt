@@ -28,7 +28,7 @@ val allDeps = Seq(
   "org.scodec" %% "scodec-bits" % "1.1.26",
   "org.scodec" %% "scodec-core" % "1.11.7",
   "io.suzaku" %% "boopickle" % "1.3.3",
-  "io.github.kitlangton" %% "zio-magic" % "0.2.6"
+  "io.github.kitlangton" %% "zio-magic" % "0.3.2"
 ) ++ testDeps
 
 val postgresDeps = Seq(
