@@ -77,7 +77,7 @@ object LocalRuntimeWithProtocol {
             .provideLayer(algebraCombinators.toLayer)
         },
         errorHandler
-      )(protocol, implicitly[Tag[State]], implicitly[Tag[Event]], implicitly[Tag[Reject]])
+      )
     )
   }
 
