@@ -25,15 +25,15 @@ val testDeps = Seq(
 val allDeps = Seq(
   "dev.zio" %% "zio" % zio,
   "dev.zio" %% "zio-streams" % zio,
-  "org.scodec" %% "scodec-bits" % "1.1.24",
+  "org.scodec" %% "scodec-bits" % "1.1.26",
   "org.scodec" %% "scodec-core" % "1.11.7",
   "io.suzaku" %% "boopickle" % "1.3.3",
-  "io.github.kitlangton" %% "zio-magic" % "0.2.0"
+  "io.github.kitlangton" %% "zio-magic" % "0.2.6"
 ) ++ testDeps
 
 val postgresDeps = Seq(
-  "org.postgresql" % "postgresql" % "42.2.20",
-  "io.getquill" %% "quill-jdbc-zio" % "3.7.0"
+  "org.postgresql" % "postgresql" % "42.2.8",
+  "io.getquill" %% "quill-jdbc-zio" % "3.7.1"
 )
 
 val akkaDeps = Seq(
