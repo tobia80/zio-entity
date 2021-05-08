@@ -3,14 +3,14 @@ package zio.entity.macros
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import zio.entity.core.Combinators
-import zio.entity.data.StemProtocol
+import zio.entity.data.EntityProtocol
 import zio.{Has, IO, ZIO}
 
 class DeriveMacrosSpec extends AnyFreeSpec {
 
   "Client macro" - {
     "called proto macro" in {
-      val _: StemProtocol[AlgebraImpl, String, String, String] = RpcMacro.derive[AlgebraImpl, String, String, String]
+      val _: EntityProtocol[AlgebraImpl, String, String, String] = RpcMacro.derive[AlgebraImpl, String, String, String]
     }
   }
 

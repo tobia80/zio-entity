@@ -2,11 +2,11 @@ package zio.entity.core
 
 import scodec.bits.BitVector
 import zio.{Has, Tag, Task, ZIO}
-import zio.entity.data.{CommandResult, StemProtocol}
+import zio.entity.data.{CommandResult, EntityProtocol}
 
 object KeyAlgebraSender {
   def keyToAlgebra[Key, Algebra, State, Event, Reject](senderFn: (Key, BitVector) => Task[Any], errorHandler: Throwable => Reject)(implicit
-    protocol: StemProtocol[Algebra, State, Event, Reject],
+    protocol: EntityProtocol[Algebra, State, Event, Reject],
     stateTag: Tag[State],
     eventTag: Tag[Event],
     rejectTag: Tag[Reject]

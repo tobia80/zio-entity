@@ -187,7 +187,7 @@ class DeriveMacros(val c: blackbox.Context) {
       }
     }
 
-    q""" new StemProtocol[$algebra, $state, $event, $reject] {
+    q""" new EntityProtocol[$algebra, $state, $event, $reject] {
             import scodec.bits.BitVector
             import boopickle.Default._
             import zio.entity.macros.BoopickleCodec._

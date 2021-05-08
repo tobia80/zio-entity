@@ -7,7 +7,7 @@ import zio.entity.core.Fold.impossible
 import zio.entity.core.journal.MemoryEventJournal
 import zio.entity.core.snapshot.Snapshotting
 import zio.entity.data.Tagging.Const
-import zio.entity.data.{EventTag, StemProtocol, Tagging}
+import zio.entity.data.{EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.macros.annotations.MethodId
 import zio.entity.test.TestEntityRuntime._
@@ -96,7 +96,7 @@ object CounterEntity {
     }
   )
 
-  implicit val counterProtocol: StemProtocol[CounterCommandHandler, Int, CountEvent, String] =
+  implicit val counterProtocol: EntityProtocol[CounterCommandHandler, Int, CountEvent, String] =
     RpcMacro.derive[CounterCommandHandler, Int, CountEvent, String]
 
 }

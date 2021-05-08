@@ -3,7 +3,7 @@ package zio.entity.core
 import scodec.bits.BitVector
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.data.{CommandResult, StemProtocol, Tagging, Versioned}
+import zio.entity.data.{CommandResult, EntityProtocol, Tagging, Versioned}
 import zio.{Has, Ref, Tag, UIO, ZIO}
 
 object LocalRuntimeWithProtocol {
@@ -12,7 +12,7 @@ object LocalRuntimeWithProtocol {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: StemProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[KeyValueStore[Key, Long]] with Has[KeyValueStore[Key, Versioned[State]]] with Has[
     EventJournal[Key, Event]
   ], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
@@ -35,7 +35,7 @@ object LocalRuntimeWithProtocol {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: StemProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[EventJournal[Key, Event]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     val memoryEventJournalOffsetStore = MemoryKeyValueStore.make[Key, Long].toLayer
     val snapshotKeyValueStore = MemoryKeyValueStore.make[Key, Versioned[State]].toLayer
@@ -48,7 +48,7 @@ object LocalRuntimeWithProtocol {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event], //default combinator that tracks events and states
     combinatorMap: Ref[Map[Key, UIO[Combinators[State, Event, Reject]]]]
-  )(implicit protocol: StemProtocol[Algebra, State, Event, Reject]): UIO[Entity[Key, Algebra, State, Event, Reject]] = {
+  )(implicit protocol: EntityProtocol[Algebra, State, Event, Reject]): UIO[Entity[Key, Algebra, State, Event, Reject]] = {
     val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
 // TODO in order to have an identity protocol, we need
     UIO.succeed(

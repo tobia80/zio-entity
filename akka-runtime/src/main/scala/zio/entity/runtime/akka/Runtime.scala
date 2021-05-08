@@ -10,7 +10,7 @@ import scodec.bits.BitVector
 import zio.entity.core._
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.data.{CommandInvocation, CommandResult, StemProtocol, Tagging, Versioned}
+import zio.entity.data.{CommandInvocation, CommandResult, EntityProtocol, Tagging, Versioned}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
 import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
@@ -38,7 +38,7 @@ object Runtime {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: StemProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[KeyValueStore[Key, Long]] with Has[KeyValueStore[Key, Versioned[State]]] with Has[
     EventJournal[Key, Event]
   ], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
@@ -61,7 +61,7 @@ object Runtime {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: StemProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     val memoryEventJournalOffsetStore = MemoryKeyValueStore.make[Key, Long].toLayer
     val snapshotKeyValueStore = MemoryKeyValueStore.make[Key, Versioned[State]].toLayer
@@ -75,7 +75,7 @@ object Runtime {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
   )(implicit
-    protocol: StemProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings], Throwable, Entity[Key, Algebra, State, Event, Reject]] = ZIO.access { layer =>
     val system = layer.get[ActorSystem]
     val settings = layer.get[RuntimeSettings]

@@ -6,7 +6,7 @@ import zio.duration.durationInt
 import zio.entity.core._
 import zio.entity.core.journal.{CommittableJournalQuery, MemoryEventJournal}
 import zio.entity.core.snapshot.{MemoryKeyValueStore, Snapshotting}
-import zio.entity.data.{EventTag, StemProtocol, Tagging, Versioned}
+import zio.entity.data.{EntityProtocol, EventTag, Tagging, Versioned}
 import zio.entity.readside
 import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcessing, ReadSideProcessor}
 import zio.entity.test.EntityProbe.KeyedProbeOperations
@@ -74,7 +74,7 @@ object TestEntityRuntime {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: StemProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZLayer[Has[MemoryEventJournal[Key, Event]] with Has[Snapshotting[Key, State]], Throwable, TestEntity[Key, Algebra, State, Event, Reject]] =
     EntityProbe.make[Key, State, Event](eventSourcedBehaviour.eventHandler).toLayer and ZLayer
       .service[MemoryEventJournal[Key, Event]] and ZLayer
