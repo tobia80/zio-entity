@@ -5,10 +5,12 @@ import akka.cluster.sharding.ShardRegion
 import izumi.reflect.Tag
 import zio.entity.core._
 import zio.entity.data.{CommandInvocation, CommandResult, Invocation, StemProtocol}
-import zio.{Has, Runtime, ULayer}
+import zio.{Has, Runtime, UIO, ULayer, ZIO, ZLayer}
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 object ZioEntityActor {
   def props[Key: StringDecoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
@@ -37,37 +39,44 @@ private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event
       throw new IllegalArgumentException(error)
     }
 
-  private val algebraCombinatorsWithKeyResolved: ULayer[Has[Combinators[State, Event, Reject]]] =
+  private val algebraCombinatorsWithKeyResolved: UIO[Combinators[State, Event, Reject]] =
     KeyedAlgebraCombinators
       .fromParams[Key, State, Event, Reject](key, eventSourcedBehaviour.eventHandler, eventSourcedBehaviour.errorHandler, algebraCombinatorConfig)
-      .toLayer
 
-  override def receive: Receive = {
-    case Start =>
-      unstashAll()
-      context.become(onActions)
-    case _ => stash()
-  }
+  //TODO manage stashed messages
+  override def receive: Receive = onActions
 
+  private val invocation: Invocation[State, Event, Reject] =
+    protocol.server(eventSourcedBehaviour.algebra, eventSourcedBehaviour.errorHandler)
+
+  private val runtime = Runtime.unsafeFromLayer(algebraCombinatorsWithKeyResolved.toLayer)
   // here key is available, so at this level we can store the state of the algebra
   private def onActions: Receive = {
     case CommandInvocation(bytes) =>
       //macro creates a map of functions of path -> Invocation
-      val invocation: Invocation[State, Event, Reject] =
-        protocol.server(eventSourcedBehaviour.algebra, eventSourcedBehaviour.errorHandler)
 
-      sender() ! Runtime.default
+      val resultToSendBack: Future[CommandResult] = runtime
         .unsafeRunToFuture(
-          invocation
-            .call(bytes)
-            .provideLayer(algebraCombinatorsWithKeyResolved)
-            .mapError { reject =>
-              log.error("Failed to decode invocation", reject)
-              sender() ! Status.Failure(reject)
-              reject
-            }
+          (for {
+            combinators <- ZIO.environment[Has[Combinators[State, Event, Reject]]]
+            result <- invocation
+              .call(bytes)
+              .provide(combinators)
+              .mapError { reject =>
+                log.error("Failed to decode invocation", reject)
+                sender() ! Status.Failure(reject)
+                reject
+              }
+          } yield result)
         )
         .map(replyBytes => CommandResult(replyBytes))(context.dispatcher)
+      val sendingActor = sender()
+      resultToSendBack.onComplete {
+        case Success(r) =>
+          sendingActor ! r
+        case Failure(f) =>
+          sendingActor ! Status.Failure(f)
+      }(context.dispatcher)
 
     case ReceiveTimeout =>
       passivate()
@@ -80,7 +89,7 @@ private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event
     context.parent ! ShardRegion.Passivate(Stop)
   }
 
-  private case object Start
+//  private case object Start
 
 }
 

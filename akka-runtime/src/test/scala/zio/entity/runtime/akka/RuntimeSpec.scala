@@ -32,12 +32,20 @@ object RuntimeSpec extends DefaultRunnableSpec {
         finalRes <- counter("key")(
           _.decrease(2)
         )
+        secondEntityRes <- counter("secondKey") {
+          _.increase(1)
+        }
+        secondEntityFinalRes <- counter("secondKey") {
+          _.increase(5)
+        }
         fromState <- counter("key")(
           _.getValue
         )
       } yield {
         assert(res)(equalTo(3)) &&
         assert(finalRes)(equalTo(1)) &&
+        assert(secondEntityRes)(equalTo(1)) &&
+        assert(secondEntityFinalRes)(equalTo(6)) &&
         assert(fromState)(equalTo(1))
       }).provideSomeLayer[TestEnvironment](layer)
     }

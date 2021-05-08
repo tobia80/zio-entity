@@ -10,10 +10,12 @@ import scodec.bits.BitVector
 import zio.entity.core._
 import zio.entity.core.journal.EventJournal
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.data.{CommandInvocation, StemProtocol, Tagging, Versioned}
+import zio.entity.data.{CommandInvocation, CommandResult, StemProtocol, Tagging, Versioned}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
 import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
+
+import scala.concurrent.Future
 
 object Runtime {
 
@@ -104,9 +106,10 @@ object Runtime {
     // macro that creates bytes when method is invoked
     KeyAlgebraSender.keyToAlgebra(
       (key: Key, bytes: BitVector) => {
-        IO.fromFuture { _ =>
+        IO.fromFuture[CommandResult] { _ =>
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
-          shardRegion ? KeyedCommand(keyEncoder(key), bytes)
+          val result: Future[CommandResult] = (shardRegion ? KeyedCommand(keyEncoder(key), bytes)).mapTo[CommandResult]
+          result
         }
       },
       eventSourcedBehaviour.errorHandler
