@@ -7,10 +7,10 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import izumi.reflect.Tag
 import scodec.bits.BitVector
+import zio.duration.{durationInt, Duration}
 import zio.entity.core._
-import zio.entity.core.journal.EventJournal
-import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.data.{CommandInvocation, CommandResult, EntityProtocol, Tagging, Versioned}
+import zio.entity.core.snapshot.Snapshotting
+import zio.entity.data.{CommandInvocation, CommandResult, EntityProtocol, Tagging}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
 import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
@@ -36,38 +36,22 @@ object Runtime {
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     tagging: Tagging[Key],
-    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
+    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
+    pollingInterval: Duration = 300.millis
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[KeyValueStore[Key, Long]] with Has[KeyValueStore[Key, Versioned[State]]] with Has[
-    EventJournal[Key, Event]
-  ], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[StoresFactory[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
-      eventJournal          <- ZIO.service[EventJournal[Key, Event]]
-      snapshotKeyValueStore <- ZIO.service[KeyValueStore[Key, Versioned[State]]]
-      offsetKeyValueStore   <- ZIO.service[KeyValueStore[Key, Long]]
+      storesFactory <- ZIO.service[StoresFactory[Key, Event, State]]
+      stores        <- storesFactory.buildStores(typeName, pollingInterval)
       combinators = AlgebraCombinatorConfig.build[Key, State, Event](
-        offsetKeyValueStore,
+        stores.offsetStore,
         tagging,
-        eventJournal,
-        Snapshotting.eachVersion(2, snapshotKeyValueStore)
+        stores.journalStore,
+        Snapshotting.eachVersion(2, stores.snapshotStore)
       )
       algebra <- buildEntity(typeName, eventSourcedBehaviour, combinators)
     } yield algebra
-  }
-
-  def memory[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
-    typeName: String,
-    tagging: Tagging[Key],
-    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
-  )(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
-    val memoryEventJournalOffsetStore = MemoryKeyValueStore.make[Key, Long].toLayer
-    val snapshotKeyValueStore = MemoryKeyValueStore.make[Key, Versioned[State]].toLayer
-
-    entityLive(typeName, tagging, eventSourcedBehaviour)
-      .provideSomeLayer[Has[ActorSystem] with Has[RuntimeSettings] with Has[EventJournal[Key, Event]]](memoryEventJournalOffsetStore and snapshotKeyValueStore)
   }
 
   def buildEntity[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
@@ -113,6 +97,6 @@ object Runtime {
         }
       },
       eventSourcedBehaviour.errorHandler
-    )(protocol, implicitly[Tag[State]], implicitly[Tag[Event]], implicitly[Tag[Reject]])
+    )
   }
 }

@@ -1,56 +1,41 @@
 package zio.entity.core
 
 import scodec.bits.BitVector
-import zio.entity.core.journal.EventJournal
-import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
-import zio.entity.data.{CommandResult, EntityProtocol, Tagging, Versioned}
+import zio.duration.{durationInt, Duration}
+import zio.entity.core.snapshot.Snapshotting
+import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.{Has, Ref, Tag, UIO, ZIO}
 
 object LocalRuntimeWithProtocol {
 
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
+    name: String,
     tagging: Tagging[Key],
-    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
+    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
+    pollingInterval: Duration = 300.millis
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[KeyValueStore[Key, Long]] with Has[KeyValueStore[Key, Versioned[State]]] with Has[
-    EventJournal[Key, Event]
-  ], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Has[StoresFactory[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
-      eventJournal          <- ZIO.service[EventJournal[Key, Event]]
-      snapshotKeyValueStore <- ZIO.service[KeyValueStore[Key, Versioned[State]]]
-      offsetKeyValueStore   <- ZIO.service[KeyValueStore[Key, Long]]
-      combinatorsMap        <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
+      storesFactory  <- ZIO.service[StoresFactory[Key, Event, State]]
+      stores         <- storesFactory.buildStores(name, pollingInterval)
+      combinatorsMap <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
       combinators = AlgebraCombinatorConfig.build[Key, State, Event](
-        offsetKeyValueStore,
+        stores.offsetStore,
         tagging,
-        eventJournal,
-        Snapshotting.eachVersion(2, snapshotKeyValueStore)
+        stores.journalStore,
+        Snapshotting.eachVersion(2, stores.snapshotStore)
       )
       algebra <- buildLocalEntity(eventSourcedBehaviour, combinators, combinatorsMap)
     } yield algebra
   }
 
-  def memory[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
-    tagging: Tagging[Key],
-    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
-  )(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[EventJournal[Key, Event]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
-    val memoryEventJournalOffsetStore = MemoryKeyValueStore.make[Key, Long].toLayer
-    val snapshotKeyValueStore = MemoryKeyValueStore.make[Key, Versioned[State]].toLayer
-
-    entityLive(tagging, eventSourcedBehaviour)
-      .provideSomeLayer[Has[EventJournal[Key, Event]]](memoryEventJournalOffsetStore and snapshotKeyValueStore)
-  }
-  // build a key => algebra transformed with key
   def buildLocalEntity[Algebra, Key: Tag, Event: Tag, State: Tag, Reject: Tag](
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event], //default combinator that tracks events and states
     combinatorMap: Ref[Map[Key, UIO[Combinators[State, Event, Reject]]]]
   )(implicit protocol: EntityProtocol[Algebra, State, Event, Reject]): UIO[Entity[Key, Algebra, State, Event, Reject]] = {
     val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
-// TODO in order to have an identity protocol, we need
     UIO.succeed(
       KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](
         { (key: Key, bytes: BitVector) =>
@@ -69,7 +54,6 @@ object LocalRuntimeWithProtocol {
                   }
             }
           } yield combinatorRetrieved
-// TODO: is it possible to remove serialization and deserialization?
           protocol
             .server(eventSourcedBehaviour.algebra, errorHandler)
             .call(bytes)

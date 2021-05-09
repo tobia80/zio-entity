@@ -1,11 +1,12 @@
 package zio.entity.runtime.akka
 
 import zio.UIO
+import zio.clock.Clock
 import zio.duration.durationInt
 import zio.entity.core.Combinators.combinators
 import zio.entity.core.Fold.impossible
 import zio.entity.core.journal.{EventJournal, MemoryEventJournal}
-import zio.entity.core.{Combinators, EventSourcedBehaviour, Fold}
+import zio.entity.core.{Combinators, EventSourcedBehaviour, Fold, MemoryStoresFactory}
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
@@ -19,8 +20,10 @@ import zio.test.{assert, DefaultRunnableSpec, ZSpec}
 object RuntimeSpec extends DefaultRunnableSpec {
 
   private val layer = (Runtime.actorSettings("Test") and
-    MemoryEventJournal.make[String, CountEvent](300.millis).toLayer[EventJournal[String, CountEvent]]) to
-    Runtime.memory("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage)).toLayer
+    (Clock.any to MemoryStoresFactory.live[String, CountEvent, Int])) to
+    Runtime
+      .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+      .toLayer
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with Akka Runtime")(
     testM("receives commands and updates state") {

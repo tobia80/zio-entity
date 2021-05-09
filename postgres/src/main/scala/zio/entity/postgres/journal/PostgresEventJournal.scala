@@ -40,7 +40,6 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
 
   override def read(key: Key, offset: Long): zio.stream.Stream[Throwable, EntityEvent[Key, Event]] = {
     // query with sequence number bigger than offset
-    //TODO change error type to Throwable
     val keyBytes: Chunk[Byte] = SchemaEncoder[Key].encode(key)
     val valueDecoder = SchemaCodec[Event]
     stream(quote {

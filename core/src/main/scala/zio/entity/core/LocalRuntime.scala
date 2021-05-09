@@ -12,7 +12,6 @@ object LocalRuntime {
   ): UIO[Entity[Key, Algebra, State, Event, Reject]] = ZIO.runtime.map { runtime =>
     val fn: Key => (Algebra, Combinators[State, Event, Reject]) = { key: Key =>
       val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
-      // TODO in order to have an identity protocol, we need
       val result: UIO[(Algebra, Combinators[State, Event, Reject])] = for {
         cache <- combinatorMap.get
         combinator <- cache.getOrElse(

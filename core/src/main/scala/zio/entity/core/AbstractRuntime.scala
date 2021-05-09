@@ -1,7 +1,5 @@
 package zio.entity.core
 
-import zio.{Has, Tag, ZIO}
-
 trait StringDecoder[A] {
   def apply(key: String): Option[A]
 
