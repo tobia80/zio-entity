@@ -12,19 +12,20 @@ object LocalRuntimeWithProtocol {
     name: String,
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
-    pollingInterval: Duration = 300.millis
+    pollingInterval: Duration = 300.millis,
+    snapEvery: Int = 2
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[StoresFactory[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
       storesFactory  <- ZIO.service[StoresFactory[Key, Event, State]]
-      stores         <- storesFactory.buildStores(name, pollingInterval)
+      stores         <- storesFactory.buildStores(name, pollingInterval, snapEvery)
       combinatorsMap <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
       combinators = AlgebraCombinatorConfig.build[Key, State, Event](
         stores.offsetStore,
         tagging,
         stores.journalStore,
-        Snapshotting.eachVersion(2, stores.snapshotStore)
+        stores.snapshotting
       )
       algebra <- buildLocalEntity(eventSourcedBehaviour, combinators, combinatorsMap)
     } yield algebra

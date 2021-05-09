@@ -1,29 +1,26 @@
 package zio.entity.core
 
+import zio.UIO
 import zio.duration.durationInt
 import zio.entity.core.Combinators._
 import zio.entity.core.CounterCommandHandler.EIO
-import zio.entity.core.CounterEntity._
 import zio.entity.core.Fold.impossible
-import zio.entity.core.journal.MemoryEventJournal
-import zio.entity.core.snapshot.Snapshotting
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.macros.annotations.MethodId
 import zio.entity.test.TestEntityRuntime._
+import zio.entity.test.TestMemoryStoresFactory
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{UIO, ZLayer}
 
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
   private val counterCommandHandler: Counter = CounterCommandHandler
-
-  private val layer = ZLayer.succeed(Snapshotting.disabled[String, Int]) and
-    MemoryEventJournal.make[String, CountEvent](300.millis).toLayer to
-    testEntity(CounterEntity.tagging, EventSourcedBehaviour(counterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+  import CounterEntity.counterProtocol
+  private val layer = TestMemoryStoresFactory.live[String, CountEvent, Int]() to
+    testEntity(CounterEntity.tagging, EventSourcedBehaviour(counterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage), 100.millis, 2)
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
     testM("receives commands, produces events and updates state") {

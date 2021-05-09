@@ -37,18 +37,19 @@ object Runtime {
     typeName: String,
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
-    pollingInterval: Duration = 300.millis
+    pollingInterval: Duration = 300.millis,
+    snapEvery: Int = 2
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[StoresFactory[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
       storesFactory <- ZIO.service[StoresFactory[Key, Event, State]]
-      stores        <- storesFactory.buildStores(typeName, pollingInterval)
+      stores        <- storesFactory.buildStores(typeName, pollingInterval, snapEvery)
       combinators = AlgebraCombinatorConfig.build[Key, State, Event](
         stores.offsetStore,
         tagging,
         stores.journalStore,
-        Snapshotting.eachVersion(2, stores.snapshotStore)
+        stores.snapshotting
       )
       algebra <- buildEntity(typeName, eventSourcedBehaviour, combinators)
     } yield algebra

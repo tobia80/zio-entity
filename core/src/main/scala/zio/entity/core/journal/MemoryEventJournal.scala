@@ -7,13 +7,19 @@ import zio.entity.core.snapshot.MemoryKeyValueStore
 import zio.entity.data.{EntityEvent, EventTag, TagConsumer}
 import zio.stream.ZStream
 
+trait TestEventStore[Key, Event] {
+  def getAppendedEvent(key: Key): Task[List[Event]]
+  def getAppendedStream(key: Key): ZStream[Any, Nothing, Event]
+}
+
 class MemoryEventJournal[Key, Event](
   pollingInterval: Duration,
   internalStateEvents: Ref[Chunk[(Key, Long, Event, List[String])]],
   internalQueue: Queue[(Key, Event)],
   clock: Clock.Service
 ) extends EventJournal[Key, Event]
-    with JournalQuery[Long, Key, Event] {
+    with JournalQuery[Long, Key, Event]
+    with TestEventStore[Key, Event] {
 
   def getAppendedEvent(key: Key): Task[List[Event]] = internalStateEvents.get.map { list =>
     list.collect {
