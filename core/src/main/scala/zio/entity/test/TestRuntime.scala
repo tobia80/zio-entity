@@ -62,15 +62,15 @@ object TestEntityRuntime {
   }
 
   type TestEntity[Key, Algebra, State, Event, Reject] =
-    Has[Entity[Key, Algebra, State, Event, Reject]] with Has[EntityProbe[Key, State, Event]]
+    Has[Entity[Key, Algebra, State, Event, Reject] with EntityProbe[Key, State, Event]]
 
   def entity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
     : URIO[Has[Entity[Key, Algebra, State, Event, Reject]], Entity[Key, Algebra, State, Event, Reject]] =
     ZIO.service[Entity[Key, Algebra, State, Event, Reject]]
 
-  def testEntityWithProbes[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
-    : URIO[TestEntity[Key, Algebra, State, Event, Reject], (Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event])] =
-    ZIO.services[Entity[Key, Algebra, State, Event, Reject], EntityProbe[Key, State, Event]]
+  def testEntityWithProbe[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
+    : URIO[TestEntity[Key, Algebra, State, Event, Reject], Entity[Key, Algebra, State, Event, Reject] with EntityProbe[Key, State, Event]] =
+    ZIO.service[Entity[Key, Algebra, State, Event, Reject] with EntityProbe[Key, State, Event]]
 
   def testEntity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
@@ -86,17 +86,28 @@ object TestEntityRuntime {
         stores.journalStore,
         stores.snapshotting
       )
-      cache  <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
+      cache <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
+      // TODO create an entity that extends Probe and TestReadSide
       entity <- LocalRuntimeWithProtocol.buildLocalEntity(eventSourcedBehaviour, baseAlgebraConfig, cache)
       probe  <- EntityProbe.make[Key, State, Event](eventSourcedBehaviour.eventHandler)
-    } yield Has.allOf(entity, probe)).toLayerMany
-  }
+      probedEntity = new Entity[Key, Algebra, State, Event, Reject] with EntityProbe[Key, State, Event] {
+        override def apply[R <: Has[_], Result](
+          key: Key
+        )(f: Algebra => ZIO[R, Reject, Result])(implicit ev1: Has[Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = entity.apply(key)(f)
 
+        override def probeForKey(key: Key): KeyedProbeOperations[State, Event] = probe.probeForKey(key)
+
+        override def eventsFromReadSide(tag: EventTag): RIO[Clock, List[Event]] = probe.eventsFromReadSide(tag)
+
+        override def eventStreamFromReadSide(tag: EventTag): ZStream[Clock, Throwable, Event] = probe.eventStreamFromReadSide(tag)
+      }
+    } yield probedEntity).toLayer
+  }
 }
 
 trait EntityProbe[Key, State, Event] {
 
-  def apply(key: Key): KeyedProbeOperations[State, Event]
+  def probeForKey(key: Key): KeyedProbeOperations[State, Event]
 
   def eventsFromReadSide(tag: EventTag): RIO[Clock, List[Event]]
 
@@ -125,7 +136,7 @@ object EntityProbe {
 //      snapshotStore      <- ZIO.service[Snapshotting[Key, State]]
     } yield new EntityProbe[Key, State, Event] {
 
-      def apply(key: Key): KeyedProbeOperations[State, Event] = KeyedProbeOperations(
+      def probeForKey(key: Key): KeyedProbeOperations[State, Event] = KeyedProbeOperations(
         state = state(key),
         stateFromSnapshot = stateFromSnapshot(key),
         events = events(key),

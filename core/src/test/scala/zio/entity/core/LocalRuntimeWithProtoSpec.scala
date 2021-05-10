@@ -25,7 +25,7 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
     testM("receives commands, produces events and updates state") {
       (for {
-        (counter, probe) <- testEntityWithProbes[String, Counter, Int, CountEvent, String]
+        counter <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
         res <- counter("key")(
           _.increase(3)
         )
@@ -38,7 +38,7 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
         secondEntityFinalRes <- counter("secondKey") {
           _.increase(5)
         }
-        events <- probe("key").events
+        events <- counter.probeForKey("key").events
         fromState <- counter("key")(
           _.getValue
         )
@@ -50,7 +50,15 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
         assert(secondEntityFinalRes)(equalTo(6)) &&
         assert(fromState)(equalTo(1))
       }).provideSomeLayer[TestEnvironment](layer)
-    }
+    } //,
+//    testM("Read side processing"){
+//      for {
+//      // TODO merge entity and probe together, put readstream and test together
+//        (counter, probe) <- testEntityWithProbes[String, Counter, Int, CountEvent, String]
+//      killSwitch <- counter.startReadStream
+//      _ <- probe.triggerAndWait
+//      } yield()
+//    }
   )
 }
 
@@ -110,3 +118,8 @@ object CounterEntity {
     RpcMacro.derive[Counter, Int, CountEvent, String]
 
 }
+
+// many read side but we need only one stream
+//object ReadSide {
+//  def countEvents(): ZIO[Has[Entity[]]] = ZIO.accessM[Has]
+//}
