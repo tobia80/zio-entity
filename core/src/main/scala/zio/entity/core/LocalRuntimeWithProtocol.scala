@@ -11,17 +11,14 @@ object LocalRuntimeWithProtocol {
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     name: String,
     tagging: Tagging[Key],
-    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
-    pollingInterval: Duration = 300.millis,
-    snapEvery: Int = 2
+    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[StoresFactory[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Has[Stores[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
-      storesFactory  <- ZIO.service[StoresFactory[Key, Event, State]]
-      stores         <- storesFactory.buildStores(name, pollingInterval, snapEvery)
+      stores         <- ZIO.service[Stores[Key, Event, State]]
       combinatorsMap <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
-      combinators = AlgebraCombinatorConfig.build[Key, State, Event](
+      combinators = AlgebraCombinatorConfig[Key, State, Event](
         stores.offsetStore,
         tagging,
         stores.journalStore,

@@ -74,16 +74,13 @@ object TestEntityRuntime {
 
   def testEntity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
-    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
-    pollingInterval: duration.Duration,
-    snapEvery: Int
+    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZLayer[Has[StoresFactory[Key, Event, State] with TestEventStore[Key, Event]], Throwable, TestEntity[Key, Algebra, State, Event, Reject]] = {
+  ): ZLayer[Has[Stores[Key, Event, State] with TestEventStore[Key, Event]], Throwable, TestEntity[Key, Algebra, State, Event, Reject]] = {
     (for {
-      storesFactory <- ZIO.service[StoresFactory[Key, Event, State] with TestEventStore[Key, Event]]
-      stores        <- storesFactory.buildStores("test", pollingInterval, snapEvery)
-      baseAlgebraConfig = AlgebraCombinatorConfig.build[Key, State, Event](
+      stores <- ZIO.service[Stores[Key, Event, State] with TestEventStore[Key, Event]]
+      baseAlgebraConfig = AlgebraCombinatorConfig[Key, State, Event](
         stores.offsetStore,
         tagging,
         stores.journalStore,
@@ -116,16 +113,14 @@ object EntityProbe {
   )
 
   def make[Key: Tag, State: Tag, Event: Tag](
-    eventHandler: Fold[State, Event],
-    pollingInterval: duration.Duration = 10.millis
-  ): ZIO[Has[StoresFactory[Key, Event, State] with TestEventStore[Key, Event]], Nothing, EntityProbe[
+    eventHandler: Fold[State, Event]
+  ): ZIO[Has[Stores[Key, Event, State] with TestEventStore[Key, Event]], Nothing, EntityProbe[
     Key,
     State,
     Event
   ]] =
     for {
-      storesFactory <- ZIO.service[StoresFactory[Key, Event, State] with TestEventStore[Key, Event]]
-      stores        <- storesFactory.buildStores("test", pollingInterval, 2)
+      stores <- ZIO.service[Stores[Key, Event, State] with TestEventStore[Key, Event]]
 //      memoryEventJournal <- ZIO.service[MemoryEventJournal[Key, Event]]
 //      snapshotStore      <- ZIO.service[Snapshotting[Key, State]]
     } yield new EntityProbe[Key, State, Event] {
@@ -138,8 +133,8 @@ object EntityProbe {
       )
       private val stateFromSnapshot: Key => Task[Option[Versioned[State]]] = key => stores.snapshotting.load(key)
       private val state: Key => Task[State] = key => events(key).flatMap(list => eventHandler.run(Chunk.fromIterable(list)))
-      private val events: Key => Task[List[Event]] = key => storesFactory.getAppendedEvent(key)
-      private val eventStream: Key => ZStream[Any, Throwable, Event] = key => storesFactory.getAppendedStream(key)
+      private val events: Key => Task[List[Event]] = key => stores.getAppendedEvent(key)
+      private val eventStream: Key => ZStream[Any, Throwable, Event] = key => stores.getAppendedStream(key)
 
       def eventsFromReadSide(tag: EventTag): RIO[Clock, List[Event]] =
         stores.journalStore.currentEventsByTag(tag, None).runCollect.map(_.toList.map(_.event.payload))

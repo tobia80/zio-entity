@@ -7,9 +7,7 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import izumi.reflect.Tag
 import scodec.bits.BitVector
-import zio.duration.{durationInt, Duration}
 import zio.entity.core._
-import zio.entity.core.snapshot.Snapshotting
 import zio.entity.data.{CommandInvocation, CommandResult, EntityProtocol, Tagging}
 import zio.entity.runtime.akka.readside.ReadSideSettings
 import zio.entity.runtime.akka.serialization.Message
@@ -36,16 +34,13 @@ object Runtime {
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     tagging: Tagging[Key],
-    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
-    pollingInterval: Duration = 300.millis,
-    snapEvery: Int = 2
+    eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[StoresFactory[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[Stores[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
-      storesFactory <- ZIO.service[StoresFactory[Key, Event, State]]
-      stores        <- storesFactory.buildStores(typeName, pollingInterval, snapEvery)
-      combinators = AlgebraCombinatorConfig.build[Key, State, Event](
+      stores <- ZIO.service[Stores[Key, Event, State]]
+      combinators = AlgebraCombinatorConfig[Key, State, Event](
         stores.offsetStore,
         tagging,
         stores.journalStore,

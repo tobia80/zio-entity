@@ -10,7 +10,7 @@ import zio.entity.data.{EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.macros.annotations.MethodId
 import zio.entity.test.TestEntityRuntime._
-import zio.entity.test.TestMemoryStoresFactory
+import zio.entity.test.TestMemoryStores
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
@@ -19,8 +19,8 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
   private val counterCommandHandler: Counter = CounterCommandHandler
   import CounterEntity.counterProtocol
-  private val layer = TestMemoryStoresFactory.live[String, CountEvent, Int]() to
-    testEntity(CounterEntity.tagging, EventSourcedBehaviour(counterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage), 100.millis, 2)
+  private val layer = TestMemoryStores.live[String, CountEvent, Int]() to
+    testEntity(CounterEntity.tagging, EventSourcedBehaviour(counterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
     testM("receives commands, produces events and updates state") {

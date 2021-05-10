@@ -5,8 +5,7 @@ import zio.clock.Clock
 import zio.duration.durationInt
 import zio.entity.core.Combinators.combinators
 import zio.entity.core.Fold.impossible
-import zio.entity.core.journal.{EventJournal, MemoryEventJournal}
-import zio.entity.core.{Combinators, EventSourcedBehaviour, Fold, MemoryStoresFactory}
+import zio.entity.core.{Combinators, EventSourcedBehaviour, Fold, MemoryStores}
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
@@ -20,7 +19,7 @@ import zio.test.{assert, DefaultRunnableSpec, ZSpec}
 object RuntimeSpec extends DefaultRunnableSpec {
 
   private val layer = (Runtime.actorSettings("Test") and
-    (Clock.any to MemoryStoresFactory.live[String, CountEvent, Int])) to
+    (Clock.any to MemoryStores.live[String, CountEvent, Int](100.millis, 2))) to
     Runtime
       .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
       .toLayer

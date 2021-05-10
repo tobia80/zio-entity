@@ -26,21 +26,7 @@ object AlgebraCombinatorConfig {
           eventJournal: EventJournal[Key, Event],
           snapshotting: Snapshotting[Key, State]
         ) =>
-          build(offsetStore, tagging, eventJournal, snapshotting)
+          AlgebraCombinatorConfig(offsetStore, tagging, eventJournal, snapshotting)
       }
-
-  def build[Key: Tag, State: Tag, Event: Tag](
-    offsetStore: KeyValueStore[Key, Long],
-    tagging: Tagging[Key],
-    eventJournal: EventJournal[Key, Event],
-    snapshotting: Snapshotting[Key, State]
-  ): AlgebraCombinatorConfig[Key, State, Event] = {
-    new AlgebraCombinatorConfig(
-      offsetStore,
-      tagging,
-      eventJournal,
-      snapshotting
-    )
-  }
 
 }

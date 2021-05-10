@@ -7,4 +7,8 @@ trait Entity[Key, Algebra, State, Event, Reject] {
     ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R
   ): ZIO[Any, Reject, Result]
 
+//  def readSideStream[Id: Tag, Offset: Tag](
+//    readSideParams: ReadSideParams[Id, Event, Reject],
+//    errorHandler: Throwable => Reject
+//  ): ZStream[Any, Reject, KillSwitch]
 }
