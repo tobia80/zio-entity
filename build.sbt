@@ -68,6 +68,13 @@ lazy val `akka-runtime` = module("zio-entity-akkaruntime", "akka-runtime", "Akka
   .settings(libraryDependencies ++= akkaDeps)
   .settings(commonProtobufSettings)
 
-aggregateProjects(`core`, `akka-runtime`, `postgres`)
+lazy val rootProj = project.aggregate(`core`, `akka-runtime`, `postgres`)
+
+lazy val docs = project       // new documentation project
+  .in(file("zio-entity-docs")) // important: it must not be docs/
+  .dependsOn(rootProj)
+  .enablePlugins(MdocPlugin)
+
+aggregateProjects(rootProj)
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
