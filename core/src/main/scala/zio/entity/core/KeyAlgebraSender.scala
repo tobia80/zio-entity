@@ -1,11 +1,18 @@
 package zio.entity.core
 
 import scodec.bits.BitVector
-import zio.{Has, Tag, Task, ZIO}
 import zio.entity.data.{CommandResult, EntityProtocol}
+import zio.entity.readside.{KillSwitch, ReadSideParams}
+import zio.stream.ZStream
+import zio.{Has, Tag, Task, ZIO}
 
 object KeyAlgebraSender {
-  def keyToAlgebra[Key, Algebra, State, Event, Reject](senderFn: (Key, BitVector) => Task[Any], errorHandler: Throwable => Reject)(implicit
+  def keyToAlgebra[Key, Algebra, State, Event, Reject](
+    fnStream: (
+      ReadSideParams[Key, Event, Reject],
+      Throwable => Reject
+    ) => ZStream[Any, Reject, KillSwitch]
+  )(senderFn: (Key, BitVector) => Task[Any], errorHandler: Throwable => Reject)(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject],
     stateTag: Tag[State],
     eventTag: Tag[Event],
@@ -39,6 +46,11 @@ object KeyAlgebraSender {
         val algebra = fn(key)
         f(algebra).provideLayer(Combinators.clientEmptyCombinator[State, Event, Reject])
       }
+
+      override def readSideStream(
+        readSideParams: ReadSideParams[Key, Event, Reject],
+        errorHandler: Throwable => Reject
+      ): ZStream[Any, Reject, KillSwitch] = fnStream(readSideParams, errorHandler)
     }
 
   }

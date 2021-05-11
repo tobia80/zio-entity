@@ -7,10 +7,14 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import izumi.reflect.Tag
 import scodec.bits.BitVector
+import zio.clock.Clock
 import zio.entity.core._
+import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandInvocation, CommandResult, EntityProtocol, Tagging}
-import zio.entity.runtime.akka.readside.ReadSideSettings
+import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcessing, ReadSideProcessor}
+import zio.entity.runtime.akka.readside.{ActorReadSideProcessing, ReadSideSettings}
 import zio.entity.runtime.akka.serialization.Message
+import zio.stream.ZStream
 import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
 
 import scala.concurrent.Future
@@ -37,23 +41,34 @@ object Runtime {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Has[ActorSystem] with Has[RuntimeSettings] with Has[Stores[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Clock with Has[ActorSystem] with Has[RuntimeSettings] with Has[ReadSideSettings] with Has[Stores[Key, Event, State]], Throwable, Entity[
+    Key,
+    Algebra,
+    State,
+    Event,
+    Reject
+  ]] = {
     for {
-      stores <- ZIO.service[Stores[Key, Event, State]]
+      stores           <- ZIO.service[Stores[Key, Event, State]]
+      clock            <- ZIO.service[Clock.Service]
+      readSideSettings <- ZIO.service[ReadSideSettings]
       combinators = AlgebraCombinatorConfig[Key, State, Event](
         stores.offsetStore,
         tagging,
         stores.journalStore,
         stores.snapshotting
       )
-      algebra <- buildEntity(typeName, eventSourcedBehaviour, combinators)
+      algebra <- buildEntity(typeName, eventSourcedBehaviour, combinators, clock, stores.committableJournalStore, readSideSettings)
     } yield algebra
   }
 
   def buildEntity[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
-    algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
+    algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event],
+    clock: Clock.Service,
+    committableJournalQuery: CommittableJournalQuery[Long, Key, Event],
+    readSideSettings: ReadSideSettings
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings], Throwable, Entity[Key, Algebra, State, Event, Reject]] = ZIO.access { layer =>
@@ -83,8 +98,21 @@ object Runtime {
 
     val keyEncoder = StringEncoder[Key]
 
+    val readSideSubscription: (
+      ReadSideParams[Key, Event, Reject],
+      Throwable => Reject
+    ) => ZStream[Any, Reject, KillSwitch] =
+      (readSideParams, errorHandler) =>
+        ReadSideProcessor
+          .readSideStream[Key, Event, Long, Reject](
+            readSideParams,
+            errorHandler,
+            clock,
+            ActorReadSideProcessing(system, readSideSettings),
+            committableJournalQuery
+          )
     // macro that creates bytes when method is invoked
-    KeyAlgebraSender.keyToAlgebra(
+    KeyAlgebraSender.keyToAlgebra(readSideSubscription)(
       (key: Key, bytes: BitVector) => {
         IO.fromFuture[CommandResult] { _ =>
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)

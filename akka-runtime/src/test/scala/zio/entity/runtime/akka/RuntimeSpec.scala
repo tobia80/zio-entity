@@ -1,28 +1,30 @@
 package zio.entity.runtime.akka
 
-import zio.UIO
-import zio.clock.Clock
 import zio.duration.durationInt
 import zio.entity.core.Combinators.combinators
+import zio.entity.core.Entity.entity
 import zio.entity.core.Fold.impossible
-import zio.entity.core.{Combinators, EventSourcedBehaviour, Fold, MemoryStores}
+import zio.entity.core.{Combinators, Entity, EventSourcedBehaviour, Fold, MemoryStores}
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.macros.annotations.MethodId
 import zio.entity.runtime.akka.CounterEntity._
-import zio.entity.test.TestEntityRuntime.entity
+import zio.magic._
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
+import zio.{Has, UIO, ZEnv, ZLayer}
 
 object RuntimeSpec extends DefaultRunnableSpec {
 
-  private val layer = (Runtime.actorSettings("Test") and
-    (Clock.any to MemoryStores.live[String, CountEvent, Int](100.millis, 2))) to
+  private val layer = ZLayer.wireSome[ZEnv, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]](
+    Runtime.actorSettings("Test"),
+    MemoryStores.live[String, CountEvent, Int](100.millis, 2),
     Runtime
       .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
       .toLayer
+  )
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with Akka Runtime")(
     testM("receives commands and updates state") {
@@ -83,7 +85,6 @@ class CounterCommandHandler {
 }
 
 object CounterEntity {
-  type Counters = String => CounterCommandHandler
 
   val tagging: Const[String] = Tagging.const[String](EventTag("Counter"))
 

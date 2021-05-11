@@ -4,8 +4,8 @@ import zio.clock.Clock
 import zio.duration.durationInt
 import zio.entity.core.journal.{CommittableJournalQuery, JournalEntry}
 import zio.entity.data.Committable
-import zio.{Has, Queue, Runtime, Schedule, Tag, Task, UIO, ULayer, ZEnv, ZIO, ZLayer}
 import zio.stream.ZStream
+import zio.{Has, Queue, Schedule, Tag, Task, UIO, ULayer, ZIO, ZLayer}
 
 trait ReadSideProcessor[Reject] {
   def readSideStream: ZStream[Any, Reject, KillSwitch]
@@ -21,15 +21,16 @@ object ReadSideProcessor {
 
   def readSideStream[Id: Tag, Event: Tag, Offset: Tag, Reject: Tag](
     readSideParams: ReadSideParams[Id, Event, Reject],
-    errorHandler: Throwable => Reject
-  ): ZStream[Clock with Has[ReadSideProcessing] with Has[CommittableJournalQuery[Offset, Id, Event]], Reject, KillSwitch] = {
-    // simplify and then improve it
+    errorHandler: Throwable => Reject,
+    clock: Clock.Service,
+    readSideProcessing: ReadSideProcessing,
+    journal: CommittableJournalQuery[Offset, Id, Event]
+  ): ZStream[Any, Reject, KillSwitch] = {
+    // TODO kill switch does not work
+    val sources: Seq[ZStream[Any, Reject, Committable[JournalEntry[Offset, Id, Event]]]] = readSideParams.tagging.tags.map { tag =>
+      journal.eventsByTag(tag, readSideParams.consumerId).mapError(errorHandler)
+    }
     for {
-      readSideProcessing <- ZStream.service[ReadSideProcessing]
-      journal            <- ZStream.service[CommittableJournalQuery[Offset, Id, Event]]
-      sources: Seq[ZStream[Any, Reject, Committable[JournalEntry[Offset, Id, Event]]]] = readSideParams.tagging.tags.map { tag =>
-        journal.eventsByTag(tag, readSideParams.consumerId).mapError(errorHandler)
-      }
       (streams, processes) <- ZStream.fromEffect(buildStreamAndProcesses(sources))
       ks                   <- ZStream.fromEffect(readSideProcessing.start(readSideParams.name, processes.toList).mapError(errorHandler))
       _ <- streams
@@ -44,6 +45,7 @@ object ReadSideProcessor {
             }
         }
         .flattenPar(sources.size)
+        .provide(Has(clock))
     } yield ks
   }
 
@@ -62,13 +64,6 @@ object ReadSideProcessor {
       }
     } yield (ZStream.fromQueue(queue), processes)
   }
-
-  def readSideSubscription[Id: Tag, Event: Tag, Offset: Tag, Reject: Tag](
-    readsideParams: ReadSideParams[Id, Event, Reject],
-    errorHandler: Throwable => Reject
-  )(implicit runtime: Runtime[ZEnv]): ZIO[Clock with Has[ReadSideProcessing] with Has[CommittableJournalQuery[Offset, Id, Event]], Reject, KillSwitch] =
-    readSideStream[Id, Event, Offset, Reject](readsideParams, errorHandler).runLast.map(_.getOrElse(KillSwitch(Task.unit)))
-
 }
 
 trait ReadSideProcessing {
@@ -79,11 +74,10 @@ object ReadSideProcessing {
   def start(name: String, processes: List[ReadSideProcess]): ZIO[Has[ReadSideProcessing], Throwable, KillSwitch] =
     ZIO.accessM[Has[ReadSideProcessing]](_.get.start(name, processes))
 
-  val memory: ULayer[Has[ReadSideProcessing]] = ZLayer.succeed { (name: String, processes: List[ReadSideProcess]) =>
-    {
-      for {
-        tasksToShutdown <- ZIO.foreach(processes)(process => process.run)
-      } yield KillSwitch(ZIO.foreach(tasksToShutdown)(_.shutdown).unit)
-    }
+  val memoryInner: ReadSideProcessing = (name: String, processes: List[ReadSideProcess]) => {
+    for {
+      tasksToShutdown <- ZIO.foreach(processes)(process => process.run)
+    } yield KillSwitch(ZIO.foreach(tasksToShutdown)(_.shutdown).unit)
   }
+  val memory: ULayer[Has[ReadSideProcessing]] = ZLayer.succeed { memoryInner }
 }

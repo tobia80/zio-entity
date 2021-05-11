@@ -1,7 +1,7 @@
 package zio.entity.test
 
 import zio.clock.Clock
-import zio.duration.{durationInt, Duration}
+import zio.duration.durationInt
 import zio.entity.core.Stores
 import zio.entity.core.journal.{CommittableJournalStore, MemoryEventJournal, TestEventStore}
 import zio.entity.core.snapshot.{KeyValueStore, MemoryKeyValueStore, Snapshotting}
@@ -24,11 +24,10 @@ object TestMemoryStores {
   }
 
   def live[Key: Tag, Event: Tag, State: Tag](
-    polling: Duration = 300.millis,
     snapEvery: Int = 2
   ): ZLayer[Clock, Nothing, Has[Stores[Key, Event, State] with TestEventStore[Key, Event]]] =
     ZLayer.fromServiceM[Clock.Service, Any, Nothing, Stores[Key, Event, State] with TestEventStore[Key, Event]] { clock =>
-      val memoryStoreM = MemoryEventJournal.make[Key, Event](polling).provideLayer(ZLayer.succeed(clock))
+      val memoryStoreM = MemoryEventJournal.make[Key, Event](50.millis).provideLayer(ZLayer.succeed(clock))
       for {
         journalStore        <- memoryStoreM
         snapshotStore       <- MemoryKeyValueStore.make[Key, Versioned[State]]

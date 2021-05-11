@@ -31,7 +31,7 @@ class MemoryEventJournal[Key, Event](
     case (internalKey, event) if internalKey == key => event
   }
 
-  private val internal = {
+  private val internal: ZRef[Nothing, Nothing, Chunk[(Key, Long, Event, List[String])], Map[Key, Chunk[(Long, Event, List[String])]]] = {
     internalStateEvents.map { elements =>
       elements
         .groupBy { element =>

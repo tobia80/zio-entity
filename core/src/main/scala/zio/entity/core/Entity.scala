@@ -1,14 +1,31 @@
 package zio.entity.core
 
-import zio.{Has, ZIO}
+import zio.entity.readside.{KillSwitch, ReadSideParams}
+import zio.stream.ZStream
+import zio.{Has, IO, Tag, Task, URIO, ZIO}
 
 trait Entity[Key, Algebra, State, Event, Reject] {
   def apply[R <: Has[_], Result](key: Key)(f: Algebra => ZIO[R, Reject, Result])(implicit
     ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R
-  ): ZIO[Any, Reject, Result]
+  ): IO[Reject, Result]
+  case class TerminateSubscription(task: IO[Reject, Unit])
 
-//  def readSideStream[Id: Tag, Offset: Tag](
-//    readSideParams: ReadSideParams[Id, Event, Reject],
-//    errorHandler: Throwable => Reject
-//  ): ZStream[Any, Reject, KillSwitch]
+  def readSideSubscription(
+    readSideParams: ReadSideParams[Key, Event, Reject],
+    errorHandler: Throwable => Reject
+  ): IO[Reject, TerminateSubscription] = for {
+    stopped <- zio.Promise.make[Reject, Unit]
+    _       <- readSideStream(readSideParams, errorHandler).interruptWhen(stopped).runDrain.fork
+  } yield TerminateSubscription(stopped.await)
+
+  def readSideStream(
+    readSideParams: ReadSideParams[Key, Event, Reject],
+    errorHandler: Throwable => Reject
+  ): ZStream[Any, Reject, KillSwitch]
+}
+
+object Entity {
+  def entity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
+    : URIO[Has[Entity[Key, Algebra, State, Event, Reject]], Entity[Key, Algebra, State, Event, Reject]] =
+    ZIO.service[Entity[Key, Algebra, State, Event, Reject]]
 }
