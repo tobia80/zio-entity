@@ -5,7 +5,7 @@
 Event sourcing refers to a collection of patterns based on persisting the full history of a domain as a sequence of
 “events”, rather than persisting just the current state.
 
-ZIO-Entity is a ZIO based library that allows to implement distributed event sourcing and CQRS easily and in a
+ZIO-Entity is a ZIO based library that allows to implement Distributed Event Sourcing and CQRS easily and in a
 functional way.
 
 ## Inspiration
@@ -32,7 +32,7 @@ ZIO-Entity wants to be a simple-to-use library that brings distributed event sou
 - Easy and versatile API
 - RPC style Entities
 - ZIO Stream CQRS
-- Pluggable runtimes
+- Pluggable runtimes for tasks distribution
 - Pluggable stores
 - Schema evolution
 - Testable in milliseconds
@@ -44,7 +44,7 @@ tests can run in ms, they are deterministic, fast and easy to reason.
 
 ### Easy and versatile API
 
-Call an Entity easily like
+Calling an Entity is as easy as writing
 
 ```scala
 accounts(fooAccount)(_.credit(10 EUR))
@@ -65,10 +65,10 @@ be the unique number set in the annotation.
 
 Process ReadSide (CQRS) using ZIO Stream.
 
-### Pluggable Runtimes
+### Pluggable Runtimes for tasks distribution
 
-You can distribute your entity calls with a pluggable runtime. At the moment Akka-Cluster, Local and LocalWithProtocol (
-Test) are ready. New runtimes using Zookeeper and Native implementations are in the works and new ones can be easily
+You can distribute your entity calls with a pluggable Runtime. At the moment Akka-Cluster, Local, LocalWithProtocol and Test are ready.
+New runtimes using Zookeeper and Native implementations are in the works and new ones can be easily
 added.
 
 ### Pluggable stores
