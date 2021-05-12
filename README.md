@@ -1,12 +1,14 @@
 [![CI](https://github.com/thehonesttech/stem/actions/workflows/scala.yml/badge.svg?branch=master)](https://github.com/thehonesttech/zio-entity/actions/workflows/scala.yml) [![Scala Steward badge](https://img.shields.io/badge/Scala_Steward-helping-blue.svg?style=flat&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAMAAAARSr4IAAAAVFBMVEUAAACHjojlOy5NWlrKzcYRKjGFjIbp293YycuLa3pYY2LSqql4f3pCUFTgSjNodYRmcXUsPD/NTTbjRS+2jomhgnzNc223cGvZS0HaSD0XLjbaSjElhIr+AAAAAXRSTlMAQObYZgAAAHlJREFUCNdNyosOwyAIhWHAQS1Vt7a77/3fcxxdmv0xwmckutAR1nkm4ggbyEcg/wWmlGLDAA3oL50xi6fk5ffZ3E2E3QfZDCcCN2YtbEWZt+Drc6u6rlqv7Uk0LdKqqr5rk2UCRXOk0vmQKGfc94nOJyQjouF9H/wCc9gECEYfONoAAAAASUVORK5CYII=)](https://scala-steward.org)
 
 # ZIO-Entity
-
 Event sourcing refers to a collection of patterns based on persisting the full history of a domain as a sequence of
-“events”, rather than persisting just the current state.
+immutable “events”, rather than persisting just the current state.
 
-ZIO-Entity is a ZIO based library that allows to implement Distributed Event Sourcing and CQRS easily and in a
-functional way.
+CQRS (Command-Query-Responsible-Segregation) is a simple pattern that strictly segregates the responsibility of handling command input into an autonomous system from the responsibility of handling side-effect-free query/read access on the same system.
+
+ZIO-Entity are distributed business domain objects, with a unique identifier, whose state is changed using event-sourcing and automatically persisted into a DB in a functional way.
+They apply the CQRS pattern through read-side views.
+An Entity with a specific id is a Singleton in the cluster, and this means that you will never have to deal with concurrency within nodes as ZIO-Entities implement the "Single Writer Principle" .
 
 ## Inspiration
 
@@ -18,7 +20,7 @@ Historically all event sourcing frameworks have failed. The reason, in my opinio
 concept of event sourcing is simple enough but, applying the concepts requires a deep understanding of the underlying
 infrastructure.
 
-Other frameworks have issues with testing, they use future, tests are non deterministic, and they could be flaky.
+Other frameworks have issues with testing, they use future, tests are non-deterministic, and they could be flaky.
 Stubbing the underlying stores is difficult and sub-optimal.
 
 These frameworks are pretty opinionated and very soon you can hit limitations. Other libraries are instead too difficult
@@ -32,7 +34,7 @@ ZIO-Entity wants to be a simple-to-use library that brings distributed event sou
 - Easy and versatile API
 - RPC style Entities
 - ZIO Stream CQRS
-- Pluggable runtimes for tasks distribution
+- Distributed by nature with pluggable runtimes
 - Pluggable stores
 - Schema evolution
 - Testable in milliseconds
@@ -65,9 +67,9 @@ be the unique number set in the annotation.
 
 Process ReadSide (CQRS) using ZIO Stream.
 
-### Pluggable Runtimes for tasks distribution
+### Distributed by nature with pluggable runtimes
 
-You can distribute your entity calls with a pluggable Runtime. At the moment Akka-Cluster, Local, LocalWithProtocol and Test are ready.
+All the calls against a ZIO-entity are distributed. The distribution mechanism is called Runtime. At the moment Akka-Cluster, Local, LocalWithProtocol and Test are ready.
 New runtimes using Zookeeper and Native implementations are in the works and new ones can be easily
 added.
 
