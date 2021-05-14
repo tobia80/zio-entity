@@ -47,12 +47,9 @@ object PostgresqlTestContainerManaged {
       config = JdbcContextConfig(
         ConfigFactory.parseMap(
           Map(
-            "datasourceClassName"     -> "org.postgresql.ds.PGSimpleDataSource",
-            "datasource.user"         -> container.getUsername,
-            "datasource.password"     -> container.getPassword,
-            "datasource.databaseName" -> container.getDatabaseName,
-            "datasource.serverName"   -> container.getContainerIpAddress,
-            "datasource.portNumber"   -> container.getFirstMappedPort.intValue()
+            "username"     -> container.getUsername,
+            "password"     -> container.getPassword,
+            "jdbcUrl"      -> container.getJdbcUrl,
           ).asJava
         )
       )
