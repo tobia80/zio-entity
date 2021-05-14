@@ -6,7 +6,7 @@ lazy val root = (project in file("."))
       List(
         organization := "zio",
         scalaVersion := "2.13.5",
-        version := "0.1.2-SNAPSHOT"
+        version := "0.1.3-SNAPSHOT"
       )
     ),
     name := "zio-entity"
@@ -28,18 +28,20 @@ val allDeps = Seq(
   "org.scodec" %% "scodec-bits" % "1.1.26",
   "org.scodec" %% "scodec-core" % "1.11.7",
   "io.suzaku" %% "boopickle" % "1.3.3",
-  "io.github.kitlangton" %% "zio-magic" % "0.3.2"
+  "io.github.kitlangton" %% "zio-magic" % "0.3.2",
+  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
 ) ++ testDeps
 
 val postgresDeps = Seq(
   "org.postgresql" % "postgresql" % "42.2.20",
-  "io.getquill" %% "quill-jdbc-zio" % "3.7.1"
+  "io.getquill" %% "quill-jdbc-zio" % "3.7.1",
+  "ch.qos.logback" % "logback-classic" % "1.2.3" % Test,
+  "com.dimafeng" %% "testcontainers-scala-postgresql" % "0.39.3" % Test
 )
 
 val akkaDeps = Seq(
   "com.typesafe.akka" %% "akka-cluster-sharding" % "2.6.14",
   "com.typesafe.akka" %% "akka-cluster" % "2.6.14",
-  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
 ) ++ testDeps
 
 lazy val commonProtobufSettings = Seq(
@@ -62,19 +64,19 @@ lazy val `core` = module("zio-entity-core", "core", "Core library")
 lazy val `postgres` = module("zio-entity-postgres", "postgres", "Postgres event sourcing stores")
   .dependsOn(`core`)
   .settings(libraryDependencies ++= postgresDeps)
+  .settings(commonProtobufSettings)
 
 lazy val `akka-runtime` = module("zio-entity-akkaruntime", "akka-runtime", "Akka runtime")
   .dependsOn(`core`)
   .settings(libraryDependencies ++= akkaDeps)
   .settings(commonProtobufSettings)
 
-lazy val rootProj = project.aggregate(`core`, `akka-runtime`, `postgres`)
 
 lazy val docs = project       // new documentation project
   .in(file("zio-entity-docs")) // important: it must not be docs/
-  .dependsOn(rootProj)
+  .dependsOn(`core`, `akka-runtime`, `postgres`)
   .enablePlugins(MdocPlugin)
 
-aggregateProjects(rootProj)
+aggregateProjects(`core`, `akka-runtime`, `postgres`)
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")

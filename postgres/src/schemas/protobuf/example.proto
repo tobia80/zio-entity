@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package zio.entity.postgres;
+
+
+message Key {
+
+    string value = 1;
+}
+
+message AValue {
+    int32 number = 1;
+    string value = 2;
+}

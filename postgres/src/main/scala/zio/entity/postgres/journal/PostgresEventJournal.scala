@@ -1,5 +1,7 @@
 package zio.entity.postgres.journal
 
+import io.getquill.context.ZioJdbc
+import io.getquill.context.ZioJdbc.{QConnection, QDataSource}
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.duration.Duration
@@ -10,21 +12,23 @@ import zio.entity.serializer.{SchemaCodec, SchemaEncoder}
 import zio.stream.ZStream
 import zio.{Chunk, NonEmptyChunk, RIO, Ref, Schedule, Task, ZIO, ZLayer}
 
-import java.sql.Connection
+import java.io.Closeable
+import javax.sql.DataSource
 
 class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
   pollingInterval: Duration,
-  connection: Connection,
+  datasource: DataSource with Closeable,
   blocking: Blocking.Service,
-  clock: Clock.Service
+  clock: Clock.Service,
+  tableName: String
 ) extends EventJournal[Key, Event]
     with JournalQuery[Long, Key, Event] {
   // table per entity
   import MyPostgresContext._
 
   type Record = (Chunk[Byte], Long, Chunk[Byte], List[String])
-  private val layer = ZLayer.succeed(connection) and ZLayer.succeed(blocking)
-
+  private def layer: ZLayer[Any, Throwable, QConnection] =
+    ZLayer.succeed(blocking) to ZioJdbc.QDataSource.fromDataSource(datasource) to QDataSource.toConnection
   override def append(key: Key, offset: Long, events: NonEmptyChunk[Event]): RIO[HasTagging, Unit] = {
     // bulk insert of elements
     ZIO.accessM[HasTagging] { tagging =>
