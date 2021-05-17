@@ -43,7 +43,8 @@ final class ReadSideWorkerActor(
       case ProcessStarted(RunningProcess(watchTermination, terminate)) =>
         log.info("[{}] Process started {}", workerId, processName)
         killSwitch = Some(terminate)
-        runtime.unsafeRunToFuture(watchTermination.as(ProcessTerminated)) pipeTo self
+        //TODO bug here, it immediately terminates
+//        runtime.unsafeRunToFuture(watchTermination.as(ProcessTerminated)) pipeTo self
         context.become {
           case Status.Failure(e) =>
             log.error(e, "Process failed {}", processName)

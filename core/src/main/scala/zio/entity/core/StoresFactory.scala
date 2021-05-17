@@ -21,7 +21,6 @@ case class StoresForEntity[Key, Event, State](
   committableJournalStore: CommittableJournalStore[Long, Key, Event]
 ) extends Stores[Key, Event, State]
 
-// TODO check if we can put readsidestream inside entity and if it is better to have the factory instead of stores
 trait StoresFactory[Key, Event, State] {
   def buildStores[E](entity: String, pollingInterval: Duration, snapshotEvery: Int): IO[E, Stores[Key, Event, State]]
 }

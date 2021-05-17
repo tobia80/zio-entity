@@ -26,7 +26,6 @@ object ReadSideProcessor {
     readSideProcessing: ReadSideProcessing,
     journal: CommittableJournalQuery[Offset, Id, Event]
   ): ZStream[Any, Reject, KillSwitch] = {
-    // TODO kill switch does not work
     val sources: Seq[ZStream[Any, Reject, Committable[JournalEntry[Offset, Id, Event]]]] = readSideParams.tagging.tags.map { tag =>
       journal.eventsByTag(tag, readSideParams.consumerId).mapError(errorHandler)
     }
@@ -59,7 +58,10 @@ object ReadSideProcessor {
           for {
             stopped <- zio.Promise.make[Reject, Unit]
             fiber   <- (queue.offer(s.interruptWhen(stopped)) *> stopped.await).fork
-          } yield RunningProcess(fiber.join.unit.mapError(cause => new RuntimeException("Failure " + cause)), stopped.succeed().unit)
+          } yield RunningProcess(
+            fiber.join.unit.mapError(cause => new RuntimeException("Failure in ReadSideProcess " + cause)),
+            stopped.succeed().unit
+          )
         }
       }
     } yield (ZStream.fromQueue(queue), processes)

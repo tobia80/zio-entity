@@ -98,6 +98,7 @@ object Runtime {
 
     val keyEncoder = StringEncoder[Key]
 
+    // TODO I want to b
     val readSideSubscription: (
       ReadSideParams[Key, Event, Reject],
       Throwable => Reject
