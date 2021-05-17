@@ -1,26 +1,31 @@
 package zio.entity.runtime.akka
 
+import zio.clock.Clock
 import zio.duration.durationInt
 import zio.entity.core.Combinators.combinators
 import zio.entity.core.Entity.entity
 import zio.entity.core.Fold.impossible
-import zio.entity.core.{Combinators, Entity, EventSourcedBehaviour, Fold, MemoryStores}
+import zio.entity.core._
 import zio.entity.data.Tagging.Const
-import zio.entity.data.{EntityProtocol, EventTag, Tagging}
+import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.macros.annotations.MethodId
+import zio.entity.readside.ReadSideParams
 import zio.entity.runtime.akka.CounterEntity._
 import zio.magic._
 import zio.test.Assertion.equalTo
-import zio.test.environment.TestEnvironment
+import zio.test.TestAspect.{sequential, timeout}
+import zio.test.environment.{TestClock, TestEnvironment}
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{Has, UIO, ZEnv, ZLayer}
+import zio.{Has, IO, Ref, Task, UIO, ZEnv, ZLayer}
+
+import scala.concurrent.Promise
 
 object RuntimeSpec extends DefaultRunnableSpec {
 
   private val layer = ZLayer.wireSome[ZEnv, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]](
     Runtime.actorSettings("Test"),
-    MemoryStores.live[String, CountEvent, Int](100.millis, 2),
+    Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2),
     Runtime
       .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
       .toLayer
@@ -52,8 +57,19 @@ object RuntimeSpec extends DefaultRunnableSpec {
         assert(secondEntityFinalRes)(equalTo(6)) &&
         assert(fromState)(equalTo(1))
       }).provideSomeLayer[TestEnvironment](layer)
-    }
-  )
+    },
+    testM("Read side processing processes work") {
+      (for {
+        counter <- entity[String, CounterCommandHandler, Int, CountEvent, String]
+        promise <- zio.Promise.make[Nothing, Int]
+        killSwitch <- counter
+          .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(promise, _, _)), _.getMessage)
+        _      <- counter("key")(_.increase(2))
+        _      <- counter("key")(_.decrease(1))
+        result <- promise.await
+      } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](Clock.live and layer)
+    } /*@@ timeout(5.seconds)*/
+  ) @@ sequential
 }
 
 sealed trait CountEvent
@@ -99,5 +115,16 @@ object CounterEntity {
 
   implicit val counterProtocol: EntityProtocol[CounterCommandHandler, Int, CountEvent, String] =
     RpcMacro.derive[CounterCommandHandler, Int, CountEvent, String]
+
+}
+
+object ReadSide {
+
+  def countIncreaseEvents(promise: zio.Promise[Nothing, Int], id: String, countEvent: CountEvent): IO[String, Unit] =
+    countEvent match {
+      case CountIncremented(value) =>
+        promise.succeed(value).unit
+      case _ => UIO.unit
+    }
 
 }

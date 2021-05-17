@@ -1,81 +1,85 @@
 package zio.entity.postgres.snapshot
 
-import com.typesafe.config.Config
-import io.getquill.context.ZioJdbc
-import io.getquill.context.ZioJdbc.{QConnection, QDataSource}
-import io.getquill.{PostgresZioJdbcContext, SnakeCase}
-import zio.blocking.Blocking
+import cats.effect.Blocker
+import doobie.{Fragment, Update0}
+import doobie.hikari.HikariTransactor
+import doobie.implicits.{toSqlInterpolator, _}
+import doobie.util.transactor.Transactor
+import zio._
 import zio.entity.core.snapshot.KeyValueStore
 import zio.entity.serializer.{SchemaCodec, SchemaDecoder, SchemaEncoder}
-import zio.{Chunk, Has, Tag, Task, ZIO, ZLayer, ZManaged}
+import zio.interop.catz._
 
-import java.io.Closeable
-import javax.sql.DataSource
+class PostgresqlKeyValueStore[Key: SchemaEncoder, Value: SchemaCodec](
+  transactor: Transactor[Task],
+  tableName: String
+) extends KeyValueStore[Key, Value] {
 
-class PostgresqlKeyValueStore[Key: SchemaEncoder, Value: SchemaCodec](datasource: DataSource with Closeable, blocking: Blocking.Service, tableName: String)
-    extends KeyValueStore[Key, Value] {
-  import MyPostgresContext._
-
-  case class Record(key: Chunk[Byte], value: Chunk[Byte])
+  case class Record(key: Array[Byte], value: Array[Byte])
   //TODO: tablename must be dynamic
-  private val records = dynamicQuerySchema[Record](tableName)
-  private def layer: ZLayer[Any, Throwable, QConnection] =
-    ZLayer.succeed(blocking) to ZioJdbc.QDataSource.fromDataSource(datasource) to QDataSource.toConnection
 
   override def setValue(key: Key, value: Value): Task[Unit] = {
-    val valueToInsert = Record(key = SchemaEncoder[Key].encode(key), value = SchemaCodec[Value].encode(value))
-    run(
-      records.insertValue(valueToInsert)
-    ).unit.provideLayer(layer)
+    val valueToInsert = Record(key = SchemaEncoder[Key].encode(key).toArray, value = SchemaCodec[Value].encode(value).toArray)
+    //ON CONFLICT (key) DO UPDATE SET value = $value;
+    (fr"INSERT INTO " ++ Fragment.const(
+      tableName
+    ) ++ fr"(key, value) VALUES(${valueToInsert.key}, ${valueToInsert.value}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value").update.run
+      .transact(transactor)
+      .unit
   }
 
   override def getValue(key: Key): Task[Option[Value]] = {
-    val keyArray: Chunk[Byte] = SchemaEncoder[Key].encode(key)
-    run(
-      records.filter { record =>
-        quote {
-          val data: Chunk[Byte] = record.key
-          data == lift(keyArray)
+    val keyArray: Array[Byte] = SchemaEncoder[Key].encode(key).toArray
+    (fr"select * from " ++ Fragment.const(tableName) ++ fr" where key = $keyArray")
+      .query[Record]
+      .option
+      .transact(transactor)
+      .map { res =>
+        res.flatMap { element =>
+          implicitly[SchemaDecoder[Value]].decode(Chunk.fromArray(element.value)).toOption
         }
       }
-    ).map(_.headOption.flatMap(res => SchemaDecoder[Value].decode(res.value).toOption)).provideLayer(layer)
   }
 
   override def deleteValue(key: Key): Task[Unit] = {
-    val keyArray: Chunk[Byte] = SchemaEncoder[Key].encode(key)
-    run(
-      records.filter(_.key == lift(keyArray)).delete
-    ).unit.provideLayer(layer)
+    val keyArray: Array[Byte] = SchemaEncoder[Key].encode(key).toArray
+    (fr"DELETE FROM " ++ Fragment.const(tableName) ++ fr" where KEY = $keyArray").update.run.transact(transactor).unit
   }
 }
 
-object MyPostgresContext extends PostgresZioJdbcContext(SnakeCase)
-
 object PostgresqlKeyValueStore {
-  import io.getquill.context.ZioJdbc._
-  def dataSource(config: Config): ZLayer[Blocking, Throwable, QDataSource] = ZioJdbc.QDataSource.fromConfig(config)
 
-  private def createTable(tableName: String): ZIO[QDataSource, Throwable, Unit] = {
-    ZIO.accessM[Has[DataSource with Closeable]] { layer =>
-      val datasource = layer.get
-      val sqlCreate: String =
-        s"""CREATE TABLE IF NOT EXISTS $tableName
-        (key bytea,
-         value bytea)"""
-      //TODO close the connection
-      ZManaged.fromAutoCloseable(ZIO.succeed(datasource.getConnection)).use { conn =>
-        ZIO.effect {
-          val stmt = conn.createStatement()
-          stmt.execute(sqlCreate)
-        }
-      }
-    }
+  private def createTable(tableName: String, transactor: Transactor[Task]): Task[Unit] = {
+    Update0(
+      s"""CREATE TABLE IF NOT EXISTS $tableName (
+             key BYTEA PRIMARY KEY, value BYTEA NOT NULL
+         )""",
+      None
+    ).run.transact(transactor).unit
   }
+
+  def transact(url: String, user: String, password: String): ZManaged[Any, Throwable, Transactor[Task]] = {
+    for {
+      runtime <- ZIO.runtime[Any].toManaged_
+      hikari <- HikariTransactor
+        .newHikariTransactor[Task](
+          "org.postgresql.Driver",
+          url,
+          user,
+          password,
+          runtime.platform.executor.asEC,
+          Blocker.liftExecutionContext(runtime.platform.executor.asEC)
+        )
+        .toManagedZIO
+    } yield hikari
+  }
+
   def live[Key: SchemaEncoder: Tag, Value: SchemaCodec: Tag](
     tableName: String
-  ): ZLayer[QDataSource, Throwable, Has[KeyValueStore[Key, Value]]] =
-    (createTable(tableName) *> (for {
-      datasource <- ZIO.service[DataSource with Closeable]
-      blocking   <- ZIO.service[Blocking.Service]
-    } yield new PostgresqlKeyValueStore[Key, Value](datasource, blocking, tableName))).toLayer[KeyValueStore[Key, Value]]
+  ): ZLayer[Has[Transactor[Task]], Throwable, Has[KeyValueStore[Key, Value]]] = {
+    ZIO.accessM[Has[Transactor[Task]]] { lay =>
+      val xa = lay.get
+      createTable(tableName, xa) *> ZIO.effect(new PostgresqlKeyValueStore[Key, Value](xa, tableName))
+    }
+  }.toLayer
 }

@@ -16,6 +16,7 @@ object ActorReadSideProcessing {
 
 }
 
+// TODO, important! I want to wait until system is ready before returning so I can use TestClock
 final class ActorReadSideProcessing private (system: ActorSystem, settings: ReadSideSettings) extends ReadSideProcessing {
 
   /** Starts `processes` distributed over underlying akka cluster.
@@ -25,21 +26,19 @@ final class ActorReadSideProcessing private (system: ActorSystem, settings: Read
     */
   def start(name: String, processes: List[ReadSideProcess]): Task[KillSwitch] = {
     ZIO.runtime[Any].flatMap { runtime =>
-      Task {
+      ZIO.effect {
         val opts = BackoffOpts
           .onFailure(
-            ReadSideWorkerActor.props(processes, name)(runtime),
+            ReadSideWorkerActor.props(i => processes.apply(i), name)(runtime),
             "worker",
             settings.minBackoff,
             settings.maxBackoff,
             settings.randomFactor
           )
 
-        val props = BackoffSupervisor.props(opts)
-
         val region = ClusterSharding(system).start(
           typeName = name,
-          entityProps = props,
+          entityProps = BackoffSupervisor.props(opts),
           settings = settings.clusterShardingSettings,
           extractEntityId = { case c @ KeepRunningWithWorker(workerId) =>
             (workerId.toString, c)
@@ -53,7 +52,7 @@ final class ActorReadSideProcessing private (system: ActorSystem, settings: Read
         val regionSupervisor = system.actorOf(
           ReadSideSupervisor
             .props(processes.size, region, settings.heartbeatInterval),
-          "DistributedProcessingSupervisor-" + URLEncoder
+          "ReadSideSupervisor-" + URLEncoder
             .encode(name, StandardCharsets.UTF_8.name())
         )
         implicit val timeout: Timeout = Timeout(settings.shutdownTimeout)

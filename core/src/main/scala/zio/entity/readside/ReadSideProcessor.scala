@@ -58,7 +58,10 @@ object ReadSideProcessor {
           for {
             stopped <- zio.Promise.make[Reject, Unit]
             fiber   <- (queue.offer(s.interruptWhen(stopped)) *> stopped.await).fork
-          } yield RunningProcess(fiber.join.unit.mapError(cause => new RuntimeException("Failure " + cause)), stopped.succeed().unit)
+          } yield RunningProcess(
+            fiber.join.unit.mapError(cause => new RuntimeException("Failure in ReadSideProcess " + cause)),
+            stopped.succeed().unit
+          )
         }
       }
     } yield (ZStream.fromQueue(queue), processes)

@@ -1,24 +1,20 @@
 package zio.entity.postgres.snapshot
 
-import com.dimafeng.testcontainers.PostgreSQLContainer
-import com.typesafe.config.ConfigFactory
-import io.getquill.JdbcContextConfig
-import io.getquill.context.ZioJdbc.QDataSource
+import doobie.util.transactor.Transactor
 import org.testcontainers.containers
-import zio.blocking.Blocking
+import org.testcontainers.containers.PostgreSQLContainer
 import zio.entity.core.snapshot.KeyValueStore
 import zio.entity.postgres.example.{AValue, Key}
+import zio.entity.serializer.protobuf.ProtobufCodecs._
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{Has, UIO, ZIO, ZLayer, ZManaged}
-
-import zio.entity.serializer.protobuf.ProtobufCodecs._
+import zio.{Has, Task, UIO, ZIO, ZLayer, ZManaged}
 
 object PostgresqlKeyValueStoreSpec extends DefaultRunnableSpec {
 
-  private val layer: ZLayer[Blocking, Throwable, Has[KeyValueStore[Key, AValue]]] =
-    PostgresqlTestContainerManaged.dataSource to PostgresqlKeyValueStore.live[Key, AValue]("test")
+  private val layer: ZLayer[Any, Throwable, Has[KeyValueStore[Key, AValue]]] =
+    PostgresqlTestContainerManaged.transact to PostgresqlKeyValueStore.live[Key, AValue]("test")
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("A postgres key value store")(
     testM("Can store and retrieve values from db") {
@@ -26,8 +22,11 @@ object PostgresqlKeyValueStoreSpec extends DefaultRunnableSpec {
         keyValueStore  <- ZIO.service[KeyValueStore[Key, AValue]]
         _              <- keyValueStore.setValue(Key("ok"), AValue(1, "example"))
         retrievedValue <- keyValueStore.getValue(Key("ok"))
+        _              <- keyValueStore.setValue(Key("ok"), AValue(2, "example2"))
+        updatedValue   <- keyValueStore.getValue(Key("ok"))
       } yield (
-        assert(retrievedValue)(equalTo(Some(AValue(1, "example"))))
+        assert(retrievedValue)(equalTo(Some(AValue(1, "example")))) &&
+        assert(updatedValue)(equalTo(Some(AValue(2, "example2"))))
       )).provideCustomLayer(layer)
     }
   )
@@ -36,24 +35,14 @@ object PostgresqlKeyValueStoreSpec extends DefaultRunnableSpec {
 object PostgresqlTestContainerManaged {
 
   val containerManaged: ZManaged[Any, Throwable, containers.PostgreSQLContainer[_]] = ZManaged.make {
-    val container = PostgreSQLContainer().container
+    val container = new PostgreSQLContainer("postgres:11.12")
     ZIO.effect(container.start()).as(container)
   } { el => UIO.succeed(el.stop()) }
 
-  val dataSource: ZLayer[Blocking, Throwable, QDataSource] = {
-    import scala.jdk.CollectionConverters._
+  val transact: ZLayer[Any, Throwable, Has[Transactor[Task]]] = {
     (for {
       container <- containerManaged
-      config = JdbcContextConfig(
-        ConfigFactory.parseMap(
-          Map(
-            "username"     -> container.getUsername,
-            "password"     -> container.getPassword,
-            "jdbcUrl"      -> container.getJdbcUrl,
-          ).asJava
-        )
-      )
-      datasource <- QDataSource.Managed.fromDataSource(config.dataSource)
-    } yield datasource.get).toLayer and ZLayer.requires[Blocking]
+      transact  <- PostgresqlKeyValueStore.transact(container.getJdbcUrl, container.getUsername, container.getPassword)
+    } yield transact).toLayer
   }
 }

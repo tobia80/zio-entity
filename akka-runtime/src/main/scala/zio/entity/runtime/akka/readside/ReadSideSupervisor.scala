@@ -3,7 +3,7 @@ package zio.entity.runtime.akka.readside
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
 import akka.cluster.sharding.ShardRegion
 import zio.entity.runtime.akka.readside.ReadSideSupervisor.{GracefulShutdown, ShutdownCompleted, Tick}
-import zio.entity.runtime.akka.readside.serialization.msg.readside.KeepRunning
+import zio.entity.runtime.akka.readside.ReadSideWorkerActor.KeepRunningWithWorker
 
 import scala.concurrent.duration.{FiniteDuration, _}
 
@@ -23,8 +23,9 @@ final class ReadSideSupervisor(processCount: Int, shardRegion: ActorRef, heartbe
 
   import context.dispatcher
 
+  // TODO: try to use ZIO clock
   private val heartbeat =
-    context.system.scheduler.schedule(0.seconds, heartbeatInterval, self, Tick)
+    context.system.scheduler.scheduleWithFixedDelay(0.seconds, heartbeatInterval, self, Tick)
 
   context.watch(shardRegion)
 
@@ -36,7 +37,7 @@ final class ReadSideSupervisor(processCount: Int, shardRegion: ActorRef, heartbe
   override def receive: Receive = {
     case Tick =>
       (0 until processCount).foreach { processId =>
-        shardRegion ! KeepRunning(processId)
+        shardRegion ! KeepRunningWithWorker(processId) //KeepRunning(processId)
       }
     case Terminated(`shardRegion`) =>
       context.stop(self)

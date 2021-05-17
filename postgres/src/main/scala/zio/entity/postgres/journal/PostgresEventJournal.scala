@@ -1,58 +1,57 @@
 package zio.entity.postgres.journal
 
-import io.getquill.context.ZioJdbc
-import io.getquill.context.ZioJdbc.{QConnection, QDataSource}
-import zio.blocking.Blocking
+import doobie.Update
+import doobie.implicits.{toSqlInterpolator, _}
+import doobie.util.transactor.Transactor
 import zio.clock.Clock
 import zio.duration.Duration
 import zio.entity.core.journal.{EventJournal, JournalEntry, JournalQuery}
 import zio.entity.data.{EntityEvent, EventTag}
-import zio.entity.postgres.snapshot.MyPostgresContext
 import zio.entity.serializer.{SchemaCodec, SchemaEncoder}
+import zio.interop.catz._
 import zio.stream.ZStream
+import zio.stream.interop.fs2z._
 import zio.{Chunk, NonEmptyChunk, RIO, Ref, Schedule, Task, ZIO, ZLayer}
-
-import java.io.Closeable
-import javax.sql.DataSource
+import doobie.postgres.implicits._
+import doobie.util.transactor.Transactor
+import zio._
+import zio.entity.core.snapshot.KeyValueStore
+import zio.entity.serializer.{SchemaCodec, SchemaDecoder, SchemaEncoder}
+import zio.interop.catz._
 
 class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
   pollingInterval: Duration,
-  datasource: DataSource with Closeable,
-  blocking: Blocking.Service,
   clock: Clock.Service,
-  tableName: String
+  tableName: String,
+  transactor: Transactor[Task]
 ) extends EventJournal[Key, Event]
     with JournalQuery[Long, Key, Event] {
   // table per entity
-  import MyPostgresContext._
 
-  type Record = (Chunk[Byte], Long, Chunk[Byte], List[String])
-  private def layer: ZLayer[Any, Throwable, QConnection] =
-    ZLayer.succeed(blocking) to ZioJdbc.QDataSource.fromDataSource(datasource) to QDataSource.toConnection
+  case class Record(key: Array[Byte], offset: Long, event: Array[Byte], tags: List[String])
   override def append(key: Key, offset: Long, events: NonEmptyChunk[Event]): RIO[HasTagging, Unit] = {
     // bulk insert of elements
     ZIO.accessM[HasTagging] { tagging =>
       val tags = tagging.tag(key).map(_.value).toList
-      val transformedEvents: Chunk[Record] = events.zipWithIndex.map { case (el, index) =>
-        (SchemaEncoder[Key].encode(key), offset + index, SchemaCodec[Event].encode(el), tags)
-      }
-      run(quote {
-        liftQuery(transformedEvents).foreach(e => query[Record].insert(e))
-      }).unit.provideLayer(layer)
+      val transformedEvents: List[Record] = events.zipWithIndex.map { case (el, index) =>
+        Record(SchemaEncoder[Key].encode(key).toArray, offset + index, SchemaCodec[Event].encode(el).toArray, tags)
+      }.toList
+      Update[Record](s"""INSERT INTO $tableName (key, offset, event, tags) VALUES (?, ?, ?, ?)""")
+        .updateMany(transformedEvents)
+        .transact(transactor)
+        .unit
     }
   }
 
   override def read(key: Key, offset: Long): zio.stream.Stream[Throwable, EntityEvent[Key, Event]] = {
     // query with sequence number bigger than offset
-    val keyBytes: Chunk[Byte] = SchemaEncoder[Key].encode(key)
+    val keyBytes: Array[Byte] = SchemaEncoder[Key].encode(key).toArray
     val valueDecoder = SchemaCodec[Event]
-    stream(quote {
-      query[Record].filter { case (key, recordOffset, _, _) =>
-        key == lift(keyBytes) && recordOffset >= lift(offset)
-      }
-    }).provideLayer(layer).mapM { case (_, recordOffset, event, _) =>
-      val eventZio: Task[Event] = ZIO.fromTry(valueDecoder.decode(event))
-      eventZio.map(event => EntityEvent(key, recordOffset, event))
+
+    sql"""SELECT * FROM $tableName where key = $keyBytes and offset >= $offset""".query[Record].stream.transact(transactor).toZStream().mapM {
+      case Record(_, recordOffset, event, _) =>
+        val eventZio: Task[Event] = ZIO.fromTry(valueDecoder.decode(Chunk.fromArray(event)))
+        eventZio.map(event => EntityEvent(key, recordOffset, event))
     }
   }
 
@@ -71,15 +70,13 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
     val tagValue = tag.value
     val valueDecoder = SchemaCodec[Event]
     val keyDecoder = SchemaCodec[Key]
-    stream(quote {
-      query[Record].filter { case (key, recordOffset, _, tags) =>
-        recordOffset >= lift(offsetValue) && tags.contains(lift(tagValue))
-      }
-    }).provideLayer(layer).mapM { case (keyBytes, recordOffset, eventBytes, tags) =>
-      for {
-        key   <- ZIO.fromTry(keyDecoder.decode(keyBytes))
-        event <- ZIO.fromTry(valueDecoder.decode(eventBytes))
-      } yield JournalEntry(recordOffset, EntityEvent(key, recordOffset, event))
+
+    sql"""SELECT * FROM $tableName  where offset >= $offsetValue and tags contains ${tagValue}""".query[Record].stream.transact(transactor).toZStream().mapM {
+      case Record(keyBytes, recordOffset, eventBytes, tags) =>
+        for {
+          key   <- ZIO.fromTry(keyDecoder.decode(Chunk.fromArray(keyBytes)))
+          event <- ZIO.fromTry(valueDecoder.decode(Chunk.fromArray(eventBytes)))
+        } yield JournalEntry(recordOffset, EntityEvent(key, recordOffset, event))
     }
   }
 }
