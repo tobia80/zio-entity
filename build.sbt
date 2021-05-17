@@ -16,7 +16,7 @@ lazy val root = (project in file("."))
 lazy val noPublishSettings = Seq(publish := (()), publishLocal := (()), publishArtifact := false)
 
 val testDeps = Seq(
-  "org.scalatest" %% "scalatest" % "3.2.8" % Test,
+  "org.scalatest" %% "scalatest" % "3.2.9" % Test,
   "dev.zio" %% "zio-test" % zio % Test,
   "dev.zio" %% "zio-test-sbt" % zio % Test,
   "dev.zio" %% "zio-test-magnolia" % zio % Test
