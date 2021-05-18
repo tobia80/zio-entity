@@ -1,6 +1,6 @@
 package zio.entity.macros
 
-import zio.entity.macros.annotations.MethodId
+import zio.entity.annotations.MethodId
 
 import scala.reflect.macros.blackbox
 

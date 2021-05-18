@@ -7,7 +7,7 @@ import zio.entity.core.Fold.impossible
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
-import zio.entity.macros.annotations.MethodId
+import zio.entity.annotations.MethodId
 import zio.entity.readside.ReadSideParams
 import zio.entity.test.TestEntityRuntime._
 import zio.entity.test.TestMemoryStores

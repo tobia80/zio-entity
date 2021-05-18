@@ -45,20 +45,3 @@ class CommittableJournalStore[O, K, E](offsetStore: KeyValueStore[TagConsumer, O
     mkCommittableSource(tag, consumerId, delegateEventJournal.currentEventsByTag(tag, _))
   }
 }
-
-//object JournalStores {
-//  def memoryJournalStoreLayer[K: Tag, E: Tag](pollingInterval: duration.Duration): ZLayer[Clock, Nothing, Has[MemoryEventJournal[K, E]]] = {
-//    MemoryEventJournal.make[K, E](pollingInterval).toLayer
-//  }
-//
-//  def snapshotStoreLayer[K: Tag, State: Tag](pollingInterval: Int = 10): ZLayer[Any, Throwable, Has[Snapshotting[K, State]]] =
-//    MemoryKeyValueStore.make[K, Versioned[State]].map(Snapshotting.eachVersion(pollingInterval, _)).toLayer
-//
-//  def memoryCommittableJournalStore[K: Tag, E: Tag]: ZLayer[Any with Has[MemoryEventJournal[K, E]], Nothing, Has[CommittableJournalQuery[Long, K, E]]] = {
-//    ZLayer.fromServiceM { (eventJournalStore: MemoryEventJournal[K, E]) =>
-//      KeyValueStore.memory[TagConsumer, Long].map { readSideOffsetStore =>
-//        new CommittableJournalStore[Long, K, E](readSideOffsetStore, eventJournalStore)
-//      }
-//    }
-//  }
-//}
