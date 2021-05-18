@@ -36,7 +36,7 @@ val postgresDeps = Seq(
   "org.tpolecat" %% "doobie-core" % "0.13.3",
   "org.tpolecat" %% "doobie-hikari" % "0.13.3",
   "org.tpolecat" %% "doobie-postgres" % "0.13.3",
-  "dev.zio" %% "zio-interop-cats" % "2.4.1.0",
+  "dev.zio" %% "zio-interop-cats" % "3.0.2.0",
   "org.testcontainers" % "postgresql" % "1.15.3" % Test
 ) ++ testDeps
 
