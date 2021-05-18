@@ -1,7 +1,7 @@
 package zio.entity.serializer.protobuf
 
-import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
-import zio.Chunk
+import scalapb.{GeneratedMessage, GeneratedMessageCompanion, GeneratedSealedOneof, TypeMapper}
+import zio.{Chunk, RIO, Task}
 import zio.entity.serializer.SchemaCodec
 
 import scala.util.Try
@@ -12,4 +12,14 @@ object ProtobufCodecs {
 
     override def decode(bytes: Chunk[Byte]): Try[T] = Try(implicitly[GeneratedMessageCompanion[T]].parseFrom(bytes.toArray))
   }
+
+  implicit def codedSealed[T <: GeneratedSealedOneof, L <: GeneratedMessage: GeneratedMessageCompanion](implicit typeMapper: TypeMapper[L, T]): SchemaCodec[T] =
+    new SchemaCodec[T] {
+      override def decode(bytes: Chunk[Byte]): Try[T] = Try(
+        implicitly[TypeMapper[L, T]].toCustom(implicitly[GeneratedMessageCompanion[L]].parseFrom(bytes.toArray))
+      )
+
+      override def encode(t: T): Chunk[Byte] = Chunk.fromArray(implicitly[GeneratedMessageCompanion[L]].toByteArray(implicitly[TypeMapper[L, T]].toBase(t)))
+    }
+
 }

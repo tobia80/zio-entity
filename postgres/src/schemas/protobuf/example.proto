@@ -12,3 +12,20 @@ message AValue {
     int32 number = 1;
     string value = 2;
 }
+
+message AnEvent {
+
+  oneof sealed_value {
+    FirstEventHappened firstEvent = 1;
+    SecondEventHappened secondEvent = 2;
+  }
+}
+
+message FirstEventHappened {
+  int32 number = 1;
+  repeated string collection = 2;
+}
+
+message SecondEventHappened {
+    string value = 1;
+}

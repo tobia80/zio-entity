@@ -58,6 +58,18 @@ object PostgresqlKeyValueStore {
     ).run.transact(transactor).unit
   }
 
+  def live[Key: SchemaEncoder: Tag, Value: SchemaCodec: Tag](
+    tableName: String
+  ): ZLayer[Has[Transactor[Task]], Throwable, Has[KeyValueStore[Key, Value]]] = {
+    ZIO.accessM[Has[Transactor[Task]]] { lay =>
+      val xa = lay.get
+      createTable(tableName, xa) *> ZIO.effect(new PostgresqlKeyValueStore[Key, Value](xa, tableName))
+    }
+  }.toLayer
+}
+
+object PostgresTransact {
+
   def transact(url: String, user: String, password: String): ZManaged[Any, Throwable, Transactor[Task]] = {
     for {
       runtime <- ZIO.runtime[Any].toManaged_
@@ -73,13 +85,4 @@ object PostgresqlKeyValueStore {
         .toManagedZIO
     } yield hikari
   }
-
-  def live[Key: SchemaEncoder: Tag, Value: SchemaCodec: Tag](
-    tableName: String
-  ): ZLayer[Has[Transactor[Task]], Throwable, Has[KeyValueStore[Key, Value]]] = {
-    ZIO.accessM[Has[Transactor[Task]]] { lay =>
-      val xa = lay.get
-      createTable(tableName, xa) *> ZIO.effect(new PostgresqlKeyValueStore[Key, Value](xa, tableName))
-    }
-  }.toLayer
 }

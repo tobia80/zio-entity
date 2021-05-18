@@ -19,14 +19,20 @@ object PostgresqlKeyValueStoreSpec extends DefaultRunnableSpec {
   override def spec: ZSpec[TestEnvironment, Any] = suite("A postgres key value store")(
     testM("Can store and retrieve values from db") {
       (for {
-        keyValueStore  <- ZIO.service[KeyValueStore[Key, AValue]]
-        _              <- keyValueStore.setValue(Key("ok"), AValue(1, "example"))
-        retrievedValue <- keyValueStore.getValue(Key("ok"))
-        _              <- keyValueStore.setValue(Key("ok"), AValue(2, "example2"))
-        updatedValue   <- keyValueStore.getValue(Key("ok"))
+        keyValueStore     <- ZIO.service[KeyValueStore[Key, AValue]]
+        _                 <- keyValueStore.setValue(Key("key2"), AValue(5, "example5"))
+        differentKeyValue <- keyValueStore.getValue(Key("key2"))
+        _                 <- keyValueStore.setValue(Key("ok"), AValue(1, "example"))
+        retrievedValue    <- keyValueStore.getValue(Key("ok"))
+        _                 <- keyValueStore.setValue(Key("ok"), AValue(2, "example2"))
+        updatedValue      <- keyValueStore.getValue(Key("ok"))
+        _                 <- keyValueStore.deleteValue(Key("ok"))
+        deletedValue      <- keyValueStore.getValue(Key("ok"))
       } yield (
+        assert(differentKeyValue)(equalTo(Some(AValue(5, "example5")))) &&
         assert(retrievedValue)(equalTo(Some(AValue(1, "example")))) &&
-        assert(updatedValue)(equalTo(Some(AValue(2, "example2"))))
+        assert(updatedValue)(equalTo(Some(AValue(2, "example2")))) &&
+        assert(deletedValue)(equalTo(None))
       )).provideCustomLayer(layer)
     }
   )
@@ -42,7 +48,7 @@ object PostgresqlTestContainerManaged {
   val transact: ZLayer[Any, Throwable, Has[Transactor[Task]]] = {
     (for {
       container <- containerManaged
-      transact  <- PostgresqlKeyValueStore.transact(container.getJdbcUrl, container.getUsername, container.getPassword)
+      transact  <- PostgresTransact.transact(container.getJdbcUrl, container.getUsername, container.getPassword)
     } yield transact).toLayer
   }
 }

@@ -5,7 +5,7 @@ lazy val root = (project in file("."))
     inThisBuild(
       List(
         organization := "zio",
-        scalaVersion := "2.13.5",
+        scalaVersion := "2.13.6",
         version := "0.1.3-SNAPSHOT"
       )
     ),
@@ -33,10 +33,10 @@ val allDeps = Seq(
 ) ++ testDeps
 
 val postgresDeps = Seq(
-  "org.tpolecat" %% "doobie-core" % "0.13.2",
-  "org.tpolecat" %% "doobie-hikari" % "0.13.2",
-  "org.tpolecat" %% "doobie-postgres" % "0.13.2",
-  "dev.zio" %% "zio-interop-cats" % "3.0.2.0",
+  "org.tpolecat" %% "doobie-core" % "0.13.3",
+  "org.tpolecat" %% "doobie-hikari" % "0.13.3",
+  "org.tpolecat" %% "doobie-postgres" % "0.13.3",
+  "dev.zio" %% "zio-interop-cats" % "2.4.1.0",
   "org.testcontainers" % "postgresql" % "1.15.3" % Test
 ) ++ testDeps
 
@@ -79,4 +79,5 @@ lazy val docs = project       // new documentation project
 
 aggregateProjects(`core`, `akka-runtime`, `postgres`)
 
+ThisBuild / parallelExecution := false
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
