@@ -79,4 +79,5 @@ lazy val docs = project       // new documentation project
 
 aggregateProjects(`core`, `akka-runtime`, `postgres`)
 
+ThisBuild / parallelExecution := false
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
