@@ -26,7 +26,7 @@ val allDeps = Seq(
   "dev.zio" %% "zio" % zio,
   "dev.zio" %% "zio-streams" % zio,
   "org.scodec" %% "scodec-bits" % "1.1.27",
-  "org.scodec" %% "scodec-core" % "1.11.7",
+  "org.scodec" %% "scodec-core" % "1.11.8",
   "io.suzaku" %% "boopickle" % "1.3.3",
   "io.github.kitlangton" %% "zio-magic" % "0.3.2",
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
