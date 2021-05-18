@@ -78,14 +78,18 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
     val valueDecoder = SchemaCodec[Event]
     val keyDecoder = SchemaCodec[Key]
 
-    (fr"SELECT (key, seq_nr, event, tags) FROM " ++ Fragment
-      .const(tableName) ++ fr" where seq_nr >= $offsetValue and tags contains ${tagValue}").query[Record].stream.transact(transactor).toZStream().mapM {
-      case Record(keyBytes, recordOffset, eventBytes, tags) =>
+    (fr"SELECT * FROM " ++ Fragment
+      .const(tableName) ++ fr" where seq_nr >= $offsetValue and tags contains ${tagValue}")
+      .query[(Long, Array[Byte], Long, Array[Byte], List[String])]
+      .stream
+      .transact(transactor)
+      .toZStream()
+      .mapM { case (_, keyBytes, recordOffset, eventBytes, tags) =>
         for {
           key   <- ZIO.fromTry(keyDecoder.decode(Chunk.fromArray(keyBytes)))
           event <- ZIO.fromTry(valueDecoder.decode(Chunk.fromArray(eventBytes)))
         } yield JournalEntry(recordOffset, EntityEvent(key, recordOffset, event))
-    }
+      }
   }
 }
 
