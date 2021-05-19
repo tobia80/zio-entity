@@ -79,7 +79,7 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
     val keyDecoder = SchemaCodec[Key]
 
     (fr"SELECT * FROM " ++ Fragment
-      .const(tableName) ++ fr" where seq_nr >= $offsetValue and tags contains ${tagValue}")
+      .const(tableName) ++ fr" where seq_nr >= $offsetValue and array_position(tags, ${tagValue} :: text) IS NOT NULL ORDER BY id ASC")
       .query[(Long, Array[Byte], Long, Array[Byte], List[String])]
       .stream
       .transact(transactor)
