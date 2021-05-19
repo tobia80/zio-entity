@@ -13,7 +13,7 @@ object ProtobufCodecs {
     override def decode(bytes: Chunk[Byte]): Try[T] = Try(implicitly[GeneratedMessageCompanion[T]].parseFrom(bytes.toArray))
   }
 
-  implicit def codedSealed[T <: GeneratedSealedOneof, L <: GeneratedMessage: GeneratedMessageCompanion](implicit typeMapper: TypeMapper[L, T]): SchemaCodec[T] =
+  implicit def codecSealed[T <: GeneratedSealedOneof, L <: GeneratedMessage: GeneratedMessageCompanion](implicit typeMapper: TypeMapper[L, T]): SchemaCodec[T] =
     new SchemaCodec[T] {
       override def decode(bytes: Chunk[Byte]): Try[T] = Try(
         implicitly[TypeMapper[L, T]].toCustom(implicitly[GeneratedMessageCompanion[L]].parseFrom(bytes.toArray))
