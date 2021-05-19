@@ -84,11 +84,11 @@ class PostgresEventJournal[Key: SchemaCodec, Event: SchemaCodec](
       .stream
       .transact(transactor)
       .toZStream()
-      .mapM { case (_, keyBytes, recordOffset, eventBytes, tags) =>
+      .mapM { case (id, keyBytes, recordOffset, eventBytes, tags) =>
         for {
           key   <- ZIO.fromTry(keyDecoder.decode(Chunk.fromArray(keyBytes)))
           event <- ZIO.fromTry(valueDecoder.decode(Chunk.fromArray(eventBytes)))
-        } yield JournalEntry(recordOffset, EntityEvent(key, recordOffset, event))
+        } yield JournalEntry(id, EntityEvent(key, recordOffset, event))
       }
   }
 }

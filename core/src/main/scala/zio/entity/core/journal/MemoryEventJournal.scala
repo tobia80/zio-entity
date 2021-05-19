@@ -14,7 +14,7 @@ trait TestEventStore[Key, Event] {
 
 class MemoryEventJournal[Key, Event](
   pollingInterval: Duration,
-  internalStateEvents: Ref[Chunk[(Key, Long, Event, List[String])]],
+  internalStateEvents: Ref[Chunk[(Long, Key, Long, Event, List[String])]],
   internalQueue: Queue[(Key, Event)],
   clock: Clock.Service
 ) extends EventJournal[Key, Event]
@@ -23,7 +23,7 @@ class MemoryEventJournal[Key, Event](
 
   def getAppendedEvent(key: Key): Task[List[Event]] = internalStateEvents.get.map { list =>
     list.collect {
-      case (innerKey, offset, event, tags) if innerKey == key => event
+      case (idSequence, innerKey, sequenceNumber, event, tags) if innerKey == key => event
     }.toList
   }
 
@@ -31,35 +31,36 @@ class MemoryEventJournal[Key, Event](
     case (internalKey, event) if internalKey == key => event
   }
 
-  private val internal: ZRef[Nothing, Nothing, Chunk[(Key, Long, Event, List[String])], Map[Key, Chunk[(Long, Event, List[String])]]] = {
+  private val internal: ZRef[Nothing, Nothing, Chunk[(Long, Key, Long, Event, List[String])], Map[Key, Chunk[(Long, Long, Event, List[String])]]] = {
     internalStateEvents.map { elements =>
       elements
         .groupBy { element =>
-          element._1
+          element._2
         }
         .view
         .mapValues { chunk =>
-          chunk.map { case (_, offset, event, tags) =>
-            (offset, event, tags)
+          chunk.map { case (idSequence, _, sequenceNumber, event, tags) =>
+            (idSequence, sequenceNumber, event, tags)
           }
         }
         .toMap
     }
   }
 
-  override def append(key: Key, offset: Long, events: NonEmptyChunk[Event]): RIO[HasTagging, Unit] =
+  override def append(key: Key, sequenceNr: Long, events: NonEmptyChunk[Event]): RIO[HasTagging, Unit] =
     ZIO.accessM { tagging =>
       internalStateEvents.update { internalEvents =>
+        val idSequenceToUse: Long = (internalEvents.lastOption.map(_._1).getOrElse(-1L)) + 1
         val tags = tagging.tag(key).map(_.value).toList
         internalEvents ++ events.zipWithIndex.map { case (event, index) =>
-          (key, index + offset, event, tags)
+          (idSequenceToUse + index, key, index + sequenceNr, event, tags)
         }
       } *> internalQueue.offerAll(events.map(ev => key -> ev)).unit
     }
 
-  override def read(key: Key, offset: Long): stream.Stream[Throwable, EntityEvent[Key, Event]] = {
+  override def read(key: Key, sequenceNr: Long): stream.Stream[Throwable, EntityEvent[Key, Event]] = {
     val a: UIO[List[EntityEvent[Key, Event]]] = internal
-      .map(_.getOrElse(key, Chunk.empty).toList.drop(offset.toInt).map { case (index, event, _) =>
+      .map(_.getOrElse(key, Chunk.empty).toList.drop(sequenceNr.toInt).map { case (_, index, event, _) =>
         EntityEvent(key, index, event)
       })
       .get
@@ -82,16 +83,16 @@ class MemoryEventJournal[Key, Event](
     val a: ZIO[Any, Nothing, List[JournalEntry[Long, Key, Event]]] = internal.get.map { state =>
       state
         .flatMap { case (key, chunk) =>
-          chunk.map { case (offset, event, tags) =>
-            (key, offset, event, tags)
+          chunk.map { case (idSequence, sequenceNr, event, tags) =>
+            (idSequence, key, sequenceNr, event, tags)
           }
         }
         .toList
-        .sortBy(_._2)
+        .sortBy(_._1)
         .drop(offset.map(_ + 1).getOrElse(0L).toInt)
         .collect {
-          case (key, offset, event, tagList) if tagList.contains(tag.value) =>
-            JournalEntry(offset, EntityEvent(key, offset, event))
+          case (idSequence, key, sequenceNr, event, tagList) if tagList.contains(tag.value) =>
+            JournalEntry(idSequence, EntityEvent(key, sequenceNr, event))
         }
     }
     stream.Stream.fromIterableM(a)
@@ -101,7 +102,7 @@ class MemoryEventJournal[Key, Event](
 object MemoryEventJournal {
   def make[Key, Event](pollingInterval: Duration): ZIO[Clock, Nothing, MemoryEventJournal[Key, Event]] = {
     for {
-      internal <- Ref.make(Chunk[(Key, Long, Event, List[String])]())
+      internal <- Ref.make(Chunk[(Long, Key, Long, Event, List[String])]())
       queue    <- Queue.unbounded[(Key, Event)]
       clock    <- ZIO.service[Clock.Service]
     } yield new MemoryEventJournal[Key, Event](pollingInterval, internal, queue, clock)

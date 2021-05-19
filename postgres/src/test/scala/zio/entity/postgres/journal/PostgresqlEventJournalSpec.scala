@@ -7,7 +7,6 @@ import zio.entity.data.{EntityEvent, EventTag, Tagging}
 import zio.entity.postgres.example.{AnEvent, AnEventMessage, FirstEventHappened, Key}
 import zio.entity.postgres.journal.PostgresqlEventJournal.EventJournalStore
 import zio.entity.postgres.snapshot.PostgresqlTestContainerManaged
-import zio.entity.serializer.protobuf.ProtobufCodecs._
 import zio.test.Assertion.equalTo
 import zio.test.environment.{TestClock, TestEnvironment}
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
@@ -60,8 +59,8 @@ object PostgresqlEventJournalSpec extends DefaultRunnableSpec {
       } yield (assert(events)(
         equalTo(
           Chunk(
-            JournalEntry[Long, Key, AnEvent](2, EntityEvent[Key, AnEvent](Key("1"), 2, FirstEventHappened(3, Nil))),
-            JournalEntry[Long, Key, AnEvent](0, EntityEvent[Key, AnEvent](Key("2"), 0, FirstEventHappened(5, Nil)))
+            JournalEntry[Long, Key, AnEvent](3, EntityEvent[Key, AnEvent](Key("1"), 2, FirstEventHappened(3, Nil))),
+            JournalEntry[Long, Key, AnEvent](4, EntityEvent[Key, AnEvent](Key("2"), 0, FirstEventHappened(5, Nil)))
           )
         )
       )))
