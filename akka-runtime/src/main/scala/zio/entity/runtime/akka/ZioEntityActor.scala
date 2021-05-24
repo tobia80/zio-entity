@@ -53,8 +53,6 @@ private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event
   // here key is available, so at this level we can store the state of the algebra
   private def onActions: Receive = {
     case CommandInvocation(bytes) =>
-      //macro creates a map of functions of path -> Invocation
-
       val resultToSendBack: Future[CommandResult] = runtime
         .unsafeRunToFuture(
           (for {
@@ -88,8 +86,6 @@ private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event
     log.debug("Passivating...")
     context.parent ! ShardRegion.Passivate(Stop)
   }
-
-//  private case object Start
 
 }
 
