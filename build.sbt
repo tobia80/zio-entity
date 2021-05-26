@@ -17,7 +17,6 @@ lazy val noPublishSettings = Seq(publish := (()), publishLocal := (()), publishA
 
 val testDeps = Seq(
   "org.scalatest" %% "scalatest" % "3.2.9" % Test,
-  "dev.zio" %% "zio-test" % zio % Test,
   "dev.zio" %% "zio-test-sbt" % zio % Test,
   "dev.zio" %% "zio-test-magnolia" % zio % Test
 )
@@ -25,10 +24,11 @@ val testDeps = Seq(
 val allDeps = Seq(
   "dev.zio" %% "zio" % zio,
   "dev.zio" %% "zio-streams" % zio,
+  "dev.zio" %% "zio-test" % zio,
   "org.scodec" %% "scodec-bits" % "1.1.27",
   "org.scodec" %% "scodec-core" % "1.11.8",
   "io.suzaku" %% "boopickle" % "1.3.3",
-  "io.github.kitlangton" %% "zio-magic" % "0.3.2",
+  "org.scala-lang" % "scala-reflect" % "2.13.6",
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
 ) ++ testDeps
 

@@ -2,6 +2,7 @@ package zio.entity.runtime.akka
 
 import zio.clock.Clock
 import zio.duration.durationInt
+import zio.entity.annotations.MethodId
 import zio.entity.core.Combinators.combinators
 import zio.entity.core.Entity.entity
 import zio.entity.core.Fold.impossible
@@ -9,27 +10,22 @@ import zio.entity.core._
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
-import zio.entity.annotations.MethodId
 import zio.entity.readside.ReadSideParams
 import zio.entity.runtime.akka.CounterEntity._
-import zio.magic._
 import zio.test.Assertion.equalTo
-import zio.test.TestAspect.{sequential, timeout}
-import zio.test.environment.{TestClock, TestEnvironment}
+import zio.test.TestAspect.sequential
+import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{Has, IO, Ref, Task, UIO, ZEnv, ZLayer}
-
-import scala.concurrent.Promise
+import zio.{Has, IO, UIO, ZEnv, ZLayer}
 
 object RuntimeSpec extends DefaultRunnableSpec {
 
-  private val layer = ZLayer.wireSome[ZEnv, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]](
-    Runtime.actorSettings("Test"),
-    Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2),
-    Runtime
+  private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] = Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
+
+  private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]] =
+    (Clock.live and stores and Runtime.actorSettings("Test")) to Runtime
       .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
       .toLayer
-  )
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with Akka Runtime")(
     testM("receives commands and updates state") {

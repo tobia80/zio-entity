@@ -169,12 +169,13 @@ Define the rpc protocol with the Command handler, the state, the event and the e
 Choose the Runtime and build layer
 
 ```scala
-  private val layer = ZLayer.wireSome[ZEnv, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]](
-  MemoryStores.live[String, CountEvent, Int](100.millis, 2),
-  Runtime
-    .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
-    .toLayer
-)
+  private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] = Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
+  
+  private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]] =
+    (Clock.live and stores and Runtime.actorSettings("Test")) to Runtime
+      .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+      .toLayer
+
 ```
 
 
