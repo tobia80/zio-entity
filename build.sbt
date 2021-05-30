@@ -21,6 +21,7 @@ val testDeps = Seq(
   "dev.zio" %% "zio-test-magnolia" % zio % Test
 )
 
+
 val allDeps = Seq(
   "dev.zio" %% "zio" % zio,
   "dev.zio" %% "zio-streams" % zio,
@@ -73,12 +74,16 @@ lazy val `akka-runtime` = module("zio-entity-akkaruntime", "akka-runtime", "Akka
   .settings(libraryDependencies ++= akkaDeps)
   .settings(commonProtobufSettings)
 
+lazy val `k8dns-runtime` = module("zio-entity-k8dnsruntime", "k8dns-runtime", "k8 DNS runtime")
+  .dependsOn(`core`)
+  .settings(commonProtobufSettings)
+
 lazy val docs = project       // new documentation project
   .in(file("zio-entity-docs")) // important: it must not be docs/
   .dependsOn(`core`, `akka-runtime`, `postgres`)
   .enablePlugins(MdocPlugin)
 
-aggregateProjects(`core`, `akka-runtime`, `postgres`)
+aggregateProjects(`core`, `akka-runtime`, `k8dns-runtime`, `postgres`)
 
 ThisBuild / parallelExecution := false
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
