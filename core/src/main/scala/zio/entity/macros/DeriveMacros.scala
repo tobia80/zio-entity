@@ -89,28 +89,29 @@ class DeriveMacros(val c: blackbox.Context) {
         q"""
              (for {
                     // start common code
-                    arguments <- Task.fromTry(mainCodec.encode(hint -> BitVector.empty).toTry).mapError(errorHandler)
+                    arguments <- UIO.succeed(ProtobufCodec.encode(mainSchema)(hint -> Chunk.empty))
                     vector    <- commFn(arguments).mapError(errorHandler)
                     // end of common code
-                    decoded <- IO.fromTry(codecResult.decodeValue(vector).toTry).mapError(errorHandler)
+                    decoded <- IO.fromTry(ProtobufCodec.decode(schemaResult)(vector).left.map(err => new Exception(err)).toTry).mapError(errorHandler)
                     result <- ZIO.fromEither(decoded)
                } yield result) 
           """
       } else {
         val TupleNCons = TypeName(s"Tuple${paramTypes.size}")
         val TupleNConsTerm = TermName(s"Tuple${paramTypes.size}")
-        q"""val codecInput = codec[$TupleNCons[..$paramTypes]]
+        q"""
+            val schemaInput = DeriveSchema.gen[$TupleNCons[..$paramTypes]]
               val tuple: $TupleNCons[..$paramTypes] = $TupleNConsTerm(..$args)
              
-              // if method has a protobuf message, use it, same for response otherwise use boopickle protocol
+              // if method has a protobuf message, use it
               (for {
-                    tupleEncoded <- IO.fromTry(codecInput.encode(tuple).toTry).mapError(errorHandler)
+                    tupleEncoded <- IO.succeed(ProtobufCodec.encode(schemaInput)(tuple))
              
                     // start common code
-                    arguments <- Task.fromTry(mainCodec.encode(hint -> tupleEncoded).toTry).mapError(errorHandler)
+                    arguments <- UIO.succeed(ProtobufCodec.encode(mainSchema)(hint -> tupleEncoded))
                     vector    <- commFn(arguments).mapError(errorHandler)
                     // end of common code
-                    decoded <- IO.fromTry(codecResult.decodeValue(vector).toTry).mapError(errorHandler)
+                    decoded <- IO.fromTry(ProtobufCodec.decode(schemaResult)(vector).left.map(err => new Exception(err)).toTry).mapError(errorHandler)
                     result <- ZIO.fromEither(decoded)
                } yield result)"""
 
@@ -120,8 +121,7 @@ class DeriveMacros(val c: blackbox.Context) {
         q""" ZIO.accessM { _: Has[Combinators[$state, $event, $reject]] =>
                        val hint = $hintToUse
                        
-                       val codecResult = codec[Either[$reject, $out]]
-                       
+                       val schemaResult = DeriveSchema.gen[Either[$reject, $out]]
                        ..$code
                      }"""
       method.copy(body = newBody).definition
@@ -158,7 +158,7 @@ class DeriveMacros(val c: blackbox.Context) {
             val TupleNCons = TypeName(s"Tuple${paramTypes.size}")
 
             q"""
-               val codecInput = codec[$TupleNCons[..$paramTypes]]
+               val schemaInput = DeriveSchema.gen[$TupleNCons[..$paramTypes]]
                """
           }
 
@@ -171,15 +171,15 @@ class DeriveMacros(val c: blackbox.Context) {
         val codecInputCode =
           if (argList.isEmpty) q"Task.unit"
           else
-            q"""Task.fromTry(codecInput.decodeValue(arguments).toTry)"""
+            q"""Task.fromTry(ProtobufCodec.decode(schemaInput)(arguments).left.map(err => new Exception(err)).toTry)"""
         val invocation =
           q"""
-              val codecResult = codec[Either[$reject, $out]]
+              val schemaResult = DeriveSchema.gen[Either[$reject, $out]]
               ..$argsTerm
               for {
                   args <- $codecInputCode
                   result <- $runImplementation
-                  vector <- Task.fromTry(codecResult.encode(result).toTry)
+                  vector <- UIO.succeed(ProtobufCodec.encode(schemaResult)(result))
               } yield vector
               """
         q"""
@@ -188,28 +188,27 @@ class DeriveMacros(val c: blackbox.Context) {
     }
 
     q""" new EntityProtocol[$algebra, $state, $event, $reject] {
-            import scodec.bits.BitVector
-            import boopickle.Default._
-            import zio.entity.macros.BoopickleCodec._
             import zio.entity.data.Invocation
+            import zio.schema.DeriveSchema
+            import zio.schema.codec.ProtobufCodec
             import zio._
             import zio.entity.core.Combinators
 
-             private val mainCodec = codec[(String, BitVector)]
-             val client: (BitVector => Task[BitVector], Throwable => $reject) => $algebra =
-               (commFn: BitVector => Task[BitVector], errorHandler: Throwable => $reject) =>
+             private val mainSchema = DeriveSchema.gen[(String, Chunk[Byte])]
+             val client: (Chunk[Byte] => Task[Chunk[Byte]], Throwable => $reject) => $algebra =
+               (commFn: Chunk[Byte] => Task[Chunk[Byte]], errorHandler: Throwable => $reject) =>
                  new $algebra { ..$stubbedMethods }
 
              val server: ($algebra, Throwable => $reject) => Invocation[$state, $event, $reject] =
                (algebra: $algebra, errorHandler: Throwable => $reject) =>
                  new Invocation[$state, $event, $reject] {
-                   private def buildVectorFromHint(hint: String, arguments: BitVector): ZIO[Has[Combinators[$state, $event, $reject]], Throwable, BitVector] = { $serverHintBitVectorFunction }
+                   private def buildVectorFromHint(hint: String, arguments: Chunk[Byte]): ZIO[Has[Combinators[$state, $event, $reject]], Throwable, Chunk[Byte]] = { $serverHintBitVectorFunction }
 
-                   override def call(message: BitVector): ZIO[Has[Combinators[$state, $event, $reject]], Throwable, BitVector] = {
+                   override def call(message: Chunk[Byte]): ZIO[Has[Combinators[$state, $event, $reject]], Throwable, Chunk[Byte]] = {
                      // for each method extract the name, it could be a sequence number for the method
                        // according to the hint, extract the arguments
                        for {
-                         element <- Task.fromTry(mainCodec.decodeValue(message).toTry)
+                         element <- Task.fromTry(ProtobufCodec.decode(mainSchema)(message).left.map(err => new Exception(err)).toTry)
                          hint = element._1
                          arguments = element._2
                          //use extractedHint to decide what to do here

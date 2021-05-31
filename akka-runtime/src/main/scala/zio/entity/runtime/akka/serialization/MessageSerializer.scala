@@ -3,7 +3,7 @@ package zio.entity.runtime.akka.serialization
 import akka.actor.ExtendedActorSystem
 import akka.serialization.{BaseSerializer, SerializerWithStringManifest}
 import com.google.protobuf.ByteString
-import scodec.bits.BitVector
+import zio.Chunk
 import zio.entity.data.{CommandInvocation, CommandResult}
 import zio.entity.runtime.akka.Runtime.KeyedCommand
 
@@ -31,9 +31,9 @@ class MessageSerializer(val system: ExtendedActorSystem) extends SerializerWithS
 
   override def toBinary(o: AnyRef): Array[Byte] = o match {
     case CommandInvocation(bytes) =>
-      bytes.toByteArray
+      bytes.toArray
     case CommandResult(bytes) =>
-      bytes.toByteArray
+      bytes.toArray
     case x @ KeyedCommand(_, _) =>
       entityCommandToBinary(x)
     case x => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
@@ -46,17 +46,17 @@ class MessageSerializer(val system: ExtendedActorSystem) extends SerializerWithS
     }
 
   private def entityCommandToBinary(a: KeyedCommand): Array[Byte] =
-    msg.runtime.KeyedCommand(a.key, ByteString.copyFrom(a.bytes.toByteBuffer)).toByteArray
+    msg.runtime.KeyedCommand(a.key, ByteString.copyFrom(a.bytes.toArray)).toByteArray
 
   private def keyedCommandFromBinary(bytes: Array[Byte]): KeyedCommand =
     msg.runtime.KeyedCommand.parseFrom(bytes) match {
       case msg.runtime.KeyedCommand(key, commandBytes, _) =>
-        KeyedCommand(key, BitVector(commandBytes.asReadOnlyByteBuffer()))
+        KeyedCommand(key, Chunk.fromByteBuffer(commandBytes.asReadOnlyByteBuffer()))
     }
 
   private def commandFromBinary(bytes: Array[Byte]): CommandInvocation =
-    CommandInvocation(BitVector(bytes))
+    CommandInvocation(Chunk.fromArray(bytes))
 
   private def commandResultFromBinary(bytes: Array[Byte]): CommandResult =
-    CommandResult(BitVector(bytes))
+    CommandResult(Chunk.fromArray(bytes))
 }
