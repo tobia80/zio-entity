@@ -1,12 +1,11 @@
 package zio.entity.core
 
-import scodec.bits.BitVector
 import zio.clock.Clock
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcessing, ReadSideProcessor}
 import zio.stream.ZStream
-import zio.{Has, Ref, Tag, UIO, ZIO}
+import zio.{Chunk, Has, Ref, Tag, UIO, ZIO}
 
 object LocalRuntimeWithProtocol {
 
@@ -44,7 +43,7 @@ object LocalRuntimeWithProtocol {
         ReadSideProcessor.readSideStream[Key, Event, Long, Reject](readSideParams, errorHandler, clock, ReadSideProcessing.memoryInner, journalQuery)
     UIO.succeed(
       KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](subscription)(
-        { (key: Key, bytes: BitVector) =>
+        { (key: Key, bytes: Chunk[Byte]) =>
           val algebraCombinators: UIO[Combinators[State, Event, Reject]] = for {
             cache <- combinatorMap.get
             combinatorRetrieved <- cache.get(key) match {

@@ -1,10 +1,9 @@
 package zio.entity.core
 
-import scodec.bits.BitVector
 import zio.entity.data.{CommandResult, EntityProtocol}
 import zio.entity.readside.{KillSwitch, ReadSideParams}
 import zio.stream.ZStream
-import zio.{Has, Tag, Task, ZIO}
+import zio.{Chunk, Has, Tag, Task, ZIO}
 
 object KeyAlgebraSender {
   def keyToAlgebra[Key, Algebra, State, Event, Reject](
@@ -12,7 +11,7 @@ object KeyAlgebraSender {
       ReadSideParams[Key, Event, Reject],
       Throwable => Reject
     ) => ZStream[Any, Reject, KillSwitch]
-  )(senderFn: (Key, BitVector) => Task[Any], errorHandler: Throwable => Reject)(implicit
+  )(senderFn: (Key, Chunk[Byte]) => Task[Any], errorHandler: Throwable => Reject)(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject],
     stateTag: Tag[State],
     eventTag: Tag[Event],

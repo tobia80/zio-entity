@@ -6,22 +6,21 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import izumi.reflect.Tag
-import scodec.bits.BitVector
 import zio.clock.Clock
 import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandInvocation, CommandResult, EntityProtocol, Tagging}
-import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcessing, ReadSideProcessor}
+import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcessor}
 import zio.entity.runtime.akka.readside.{ActorReadSideProcessing, ReadSideSettings}
 import zio.entity.runtime.akka.serialization.Message
 import zio.stream.ZStream
-import zio.{Has, IO, Managed, Task, ZIO, ZLayer}
+import zio.{Chunk, Has, IO, Managed, Task, ZIO, ZLayer}
 
 import scala.concurrent.Future
 
 object Runtime {
 
-  case class KeyedCommand(key: String, bytes: BitVector) extends Message
+  case class KeyedCommand(key: String, bytes: Chunk[Byte]) extends Message
 
   def actorSystemLayer(name: String, confFileName: String = "entity.conf"): ZLayer[Any, Throwable, Has[ActorSystem]] =
     ZLayer.fromManaged(
@@ -113,7 +112,7 @@ object Runtime {
           )
     // macro that creates bytes when method is invoked
     KeyAlgebraSender.keyToAlgebra(readSideSubscription)(
-      (key: Key, bytes: BitVector) => {
+      (key: Key, bytes: Chunk[Byte]) => {
         IO.fromFuture[CommandResult] { _ =>
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
           val result: Future[CommandResult] = (shardRegion ? KeyedCommand(keyEncoder(key), bytes)).mapTo[CommandResult]
