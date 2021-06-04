@@ -45,6 +45,10 @@ val akkaDeps = Seq(
   "com.typesafe.akka" %% "akka-cluster" % "2.6.14",
 ) ++ testDeps
 
+val k8dnsDeps = Seq(
+  "dev.zio" %% "zio-memberlist" % "0.0.0+6-97eb0ea1+20210601-0929-SNAPSHOT"
+) ++ testDeps
+
 lazy val commonProtobufSettings = Seq(
   Compile / PB.targets := Seq(
     scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
@@ -74,6 +78,7 @@ lazy val `akka-runtime` = module("zio-entity-akkaruntime", "akka-runtime", "Akka
 
 lazy val `k8dns-runtime` = module("zio-entity-k8dnsruntime", "k8dns-runtime", "k8 DNS runtime")
   .dependsOn(`core`)
+  .settings(libraryDependencies ++= k8dnsDeps)
   .settings(commonProtobufSettings)
 
 lazy val docs = project       // new documentation project
