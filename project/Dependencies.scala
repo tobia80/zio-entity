@@ -1,5 +1,5 @@
 object Dependencies {
 
-  val zio = "1.0.8"
+  val zio = "1.0.9"
 
 }

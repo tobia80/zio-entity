@@ -9,9 +9,7 @@ import zio.memberlist.{Memberlist, NodeAddress, Swim}
 import zio.stream.{Sink, ZStream}
 import zio.{memberlist, Chunk, Has, Ref, Task, UIO, ZHub, ZIO, ZLayer, ZManaged}
 
-import java.time.Instant
 import java.util.UUID
-import scala.collection.immutable.TreeSeqMap
 
 object Runtime {
 
@@ -23,12 +21,18 @@ object Runtime {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Clock with Has[RuntimeServer] with Has[Stores[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
+  ): ZIO[Clock with Has[RuntimeServer] with Has[ExpiringCache[String, Combinators[_, _, _]]] with Has[Stores[Key, Event, State]], Throwable, Entity[
+    Key,
+    Algebra,
+    State,
+    Event,
+    Reject
+  ]] = {
 
     for {
       runtimeServer  <- ZIO.service[RuntimeServer]
       stores         <- ZIO.service[Stores[Key, Event, State]]
-      combinatorsMap <- Ref.make[Map[Key, UIO[Combinators[State, Event, Reject]]]](Map.empty)
+      combinatorsMap <- ZIO.service[ExpiringCache[String, Combinators[_, _, _]]]
       combinators = AlgebraCombinatorConfig[Key, State, Event](
         stores.offsetStore,
         tagging,
@@ -40,17 +44,16 @@ object Runtime {
         val key = implicitly[StringDecoder[Key]].decode(swimMessage.key)
         val algebraCombinators: ZIO[Any, Exception, Combinators[State, Event, Reject]] = for {
           keyToUse <- ZIO.fromOption(key).mapError(_ => new Exception("Cannot decode key"))
-          cache    <- combinatorsMap.get
-          combinatorRetrieved <- cache.get(keyToUse) match {
+          keyInStringForm = implicitly[StringEncoder[Key]].encode(keyToUse)
+          cache <- combinatorsMap.get(keyInStringForm)
+          combinatorRetrieved <- cache match {
             case Some(combinator) =>
-              combinator
+              UIO.succeed(combinator.asInstanceOf[Combinators[State, Event, Reject]])
             case None =>
               KeyedAlgebraCombinators
                 .fromParams[Key, State, Event, Reject](keyToUse, eventSourcedBehaviour.eventHandler, eventSourcedBehaviour.errorHandler, combinators)
                 .flatMap { combinator =>
-                  val uioCombinator = UIO.succeed(combinator)
-                  val newMap = cache + (keyToUse -> uioCombinator)
-                  combinatorsMap.set(newMap) *> uioCombinator
+                  combinatorsMap.add(keyInStringForm -> combinator).as(combinator)
                 }
           }
         } yield combinatorRetrieved
@@ -62,7 +65,6 @@ object Runtime {
             .provideLayer(ZLayer.fromEffect(algebraCombinators))
           //TODO send it back
           _ <- runtimeServer.sendAndForget(nodeAddress, swimMessage.copy(response = true, payload = result))
-//        _ <- runtimeServer.sendAndForget(???)
         } yield ()
       }
       _ <- runtimeServer.registerListener(messageReceivedForMe)
@@ -85,6 +87,7 @@ trait RuntimeServer {
   def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit]
 
   def send(key: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
+
 }
 
 case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityName: String, entityType: String, payload: Chunk[Byte])
@@ -98,17 +101,20 @@ object SwimRuntimeServer {
     _                          <- memberlist.receive[SwimMessage].run(Sink.fromHub(hub)).toManaged_
     listeners                  <- Ref.make[Map[String, (NodeAddress, SwimMessage) => UIO[Unit]]](Map.empty).toManaged_
     receiveMessageSubscription <- hub.subscribe
+    _ <- ZStream
+      .fromQueue(receiveMessageSubscription)
+      .foreach { case (nodeAddress, swimMessage) =>
+        for {
+          listener <- listeners.get
+          currentListener = listener.get(swimMessage.entityType)
+          _ <- currentListener.get.apply(nodeAddress, swimMessage)
+        } yield ()
+        ???
+      }
+      .toManaged_
+      .fork
   } yield new RuntimeServer {
 
-    ZStream.fromQueue(receiveMessageSubscription).foreach { case (nodeAddress, swimMessage) =>
-      //TODO retrieve the logic from the logic cache, call it with the protocol
-      for {
-        listener <- listeners.get
-        currentListener = listener.get(swimMessage.entityType)
-        _ <- currentListener.get.apply(nodeAddress, swimMessage)
-      } yield ()
-      ???
-    }
     // subscribe to hub that receive message, has a cache of combinators by entity and key and has an eviction strategy
 
     private def getShardNode(key: String, nodes: List[NodeAddress]): NodeAddress = {
@@ -143,33 +149,4 @@ object SwimRuntimeServer {
 
     override def registerListener(messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit] = ???
   }).toLayer
-}
-
-case class ExpirableMap[Key, Value](
-  treeSeqMap: TreeSeqMap[Key, (Value, Instant)],
-  expiredTime: Duration
-) {
-  def +(element: (Key, Value), now: Instant): ExpirableMap[Key, Value] = {
-    ExpirableMap(treeSeqMap + (element._1 -> (element._2 -> now)), expiredTime)
-  }
-
-  def getAndUpdate(key: Key, now: Instant): Option[(ExpirableMap[Key, Value], Value)] = treeSeqMap.get(key).map { case (value, _) =>
-    ExpirableMap(treeSeqMap.updated(key, (value, now)), expiredTime) -> value
-  }
-
-  def expire(now: Instant): ExpirableMap[Key, Value] = {
-    def isExpired(lastAccess: Instant): Boolean = {
-      (lastAccess.toEpochMilli + expiredTime.toMillis) <= now.toEpochMilli
-    }
-    treeSeqMap.foldLeft(ExpirableMap.empty[Key, Value](expiredTime)) { case (map, (key, (value, instant))) =>
-      if (isExpired(instant)) {
-        ExpirableMap(treeSeqMap.removed(key), expiredTime)
-      } else return map
-    }
-  }
-}
-
-object ExpirableMap {
-  def empty[Key, Value](expiration: Duration): ExpirableMap[Key, Value] =
-    ExpirableMap[Key, Value](TreeSeqMap.empty[Key, (Value, Instant)](TreeSeqMap.OrderBy.Modification), expiration)
 }
