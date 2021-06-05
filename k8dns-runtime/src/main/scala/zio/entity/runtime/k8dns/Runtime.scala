@@ -67,13 +67,13 @@ object Runtime {
           _ <- runtimeServer.sendAndForget(nodeAddress, swimMessage.copy(response = true, payload = result))
         } yield ()
       }
-      _ <- runtimeServer.registerListener(messageReceivedForMe)
+      _ <- runtimeServer.registerListener(typeName, messageReceivedForMe)
 
     } yield KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](???)(
       { (key, payload) =>
         val keyString = implicitly[StringEncoder[Key]].encode(key)
 
-        runtimeServer.send(keyString, payload)
+        runtimeServer.send(keyString, typeName, payload)
       },
       eventSourcedBehaviour.errorHandler
     )
@@ -82,15 +82,15 @@ object Runtime {
 }
 
 trait RuntimeServer {
-  def registerListener(messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit]
+  def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit]
 
   def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit]
 
-  def send(key: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
+  def send(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
 
 }
 
-case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityName: String, entityType: String, payload: Chunk[Byte])
+case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityType: String, payload: Chunk[Byte])
 
 object SwimRuntimeServer {
   val messageTimeout: Duration = 5.seconds
@@ -99,7 +99,7 @@ object SwimRuntimeServer {
     clock                      <- ZManaged.service[Clock.Service]
     hub                        <- ZHub.bounded[(NodeAddress, SwimMessage)](128).toManaged_
     _                          <- memberlist.receive[SwimMessage].run(Sink.fromHub(hub)).toManaged_
-    listeners                  <- Ref.make[Map[String, (NodeAddress, SwimMessage) => UIO[Unit]]](Map.empty).toManaged_
+    listeners                  <- Ref.make[Map[String, (NodeAddress, SwimMessage) => Task[Unit]]](Map.empty).toManaged_
     receiveMessageSubscription <- hub.subscribe
     _ <- ZStream
       .fromQueue(receiveMessageSubscription)
@@ -109,7 +109,6 @@ object SwimRuntimeServer {
           currentListener = listener.get(swimMessage.entityType)
           _ <- currentListener.get.apply(nodeAddress, swimMessage)
         } yield ()
-        ???
       }
       .toManaged_
       .fork
@@ -123,13 +122,18 @@ object SwimRuntimeServer {
       nodes(nodeIndex)
     }
 
-    override def send(key: String, payload: Chunk[Byte]): Task[Chunk[Byte]] = {
+    override def send(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]] = {
       (for {
         dequeue     <- hub.subscribe
         activeNodes <- memberlist.nodes[SwimMessage].toManaged_
         nodeToUse = getShardNode(key, activeNodes.toList)
         uuid = UUID.randomUUID()
-        _ <- memberlist.send[SwimMessage](SwimMessage(uuid, false, "", "", "", payload), nodeToUse).toManaged_
+        _ <- memberlist
+          .send[SwimMessage](
+            SwimMessage(invocationId = uuid, response = false, key = key, entityType = entityType, payload = payload),
+            nodeToUse
+          )
+          .toManaged_
         // TODO not sure if accumulates from subscribe or from stream
         element <- ZStream
           .fromQueue(dequeue.filterOutput { case (address, message) => message.invocationId.toString == uuid.toString && message.response })
@@ -145,8 +149,12 @@ object SwimRuntimeServer {
       }).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
     }.useNow
 
-    override def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit] = ???
+    override def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit] =
+      memberlist.send(swimMessage, nodeAddress).provideLayer(ZLayer.succeed(swim))
 
-    override def registerListener(messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit] = ???
+    override def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit] =
+      listeners.update { old =>
+        old + (entityType -> messageReceivedForMe)
+      }
   }).toLayer
 }
