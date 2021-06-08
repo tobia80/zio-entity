@@ -1,9 +1,9 @@
 package zio.entity.runtime.k8dns
 
-import zio.{Has, Ref, Schedule, Tag, UIO, ZIO, ZLayer}
 import zio.clock.Clock
 import zio.duration.Duration
 import zio.stream.ZStream
+import zio.{Has, Ref, Schedule, Tag, UIO, ZIO, ZLayer}
 
 import java.time.Instant
 import scala.collection.immutable.TreeSeqMap
@@ -21,6 +21,7 @@ case class ExpirableMap[Key, Value](
   }
 
   def expire(now: Instant): ExpirableMap[Key, Value] = {
+    // TODO change in order to check if queue is empty (so everything has been processed)
     def isExpired(lastAccess: Instant): Boolean = {
       (lastAccess.toEpochMilli + expiredTime.toMillis) <= now.toEpochMilli
     }

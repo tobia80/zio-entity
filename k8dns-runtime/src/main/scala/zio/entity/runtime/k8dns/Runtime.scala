@@ -6,7 +6,7 @@ import zio.duration.{durationInt, Duration}
 import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{EntityProtocol, Tagging}
-import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcess, ReadSideProcessing, ReadSideProcessor}
+import zio.entity.readside._
 import zio.memberlist.{Memberlist, NodeAddress, Swim}
 import zio.stream.{Sink, ZStream}
 import zio.{memberlist, Chunk, Has, Ref, Task, UIO, ZHub, ZIO, ZLayer, ZManaged}
@@ -110,7 +110,9 @@ trait RuntimeServer {
 
 }
 
-case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityType: String, payload: Chunk[Byte])
+case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityType: String, payload: Chunk[Byte]) {
+  def entityTypeAndId: String = s"${entityType}_$key"
+}
 
 object SwimRuntimeServer {
   val messageTimeout: Duration = 5.seconds
@@ -123,7 +125,7 @@ object SwimRuntimeServer {
     receiveMessageSubscription <- hub.subscribe
     _ <- ZStream
       .fromQueue(receiveMessageSubscription)
-      .mapMPar(128) { case (nodeAddress, swimMessage) =>
+      .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, swimMessage) =>
         for {
           listener <- listeners.get
           currentListener = listener.get(swimMessage.entityType)
@@ -214,3 +216,43 @@ class SwimReadSideProcessing(swim: Memberlist.Service[SwimMessage], clock: Clock
   }
 
 }
+
+//// TODO: mapmpartitioned should already deal with parallelism and keys making not necessary to create actors
+//case class ActorMessage(nodeAddress: NodeAddress, message: SwimMessage)
+//// this is the value that is stored in the cache by key
+//class ZIOActor[Algebra, State: Tag, Event: Tag, Reject: Tag](
+//  queue: Queue[ActorMessage],
+//  algebra: Algebra,
+//  promise: Ref[Promise[Throwable, Unit]],
+//  errorHandler: Throwable => Reject,
+//  combinators: Combinators[State, Event, Reject]
+//)(implicit protocol: EntityProtocol[Algebra, State, Event, Reject]) {
+//  def startProcessQueue(sendAndForget: (NodeAddress, SwimMessage) => Task[Unit]): URIO[Any, Fiber.Runtime[Throwable, Unit]] = {
+//    (for {
+//      prom <- ZStream.fromEffect(Promise.make[Throwable, Unit])
+//      -    <- ZStream.fromEffect(promise.set(prom))
+//      element <- ZStream
+//        .fromQueue(queue)
+//        .mapM { actorMessage =>
+//          // if empty create combinator and set in the cache
+//          for {
+//            result <- protocol.server
+//              .apply(algebra, errorHandler)
+//              .call(actorMessage.message.payload)
+//              .provideLayer(ZLayer.succeed(combinators))
+//            _ <- sendAndForget(actorMessage.nodeAddress, actorMessage.message.copy(response = true, payload = result))
+//          } yield ()
+//        }
+//        .interruptWhen(prom)
+//    } yield element).runDrain.fork
+//
+//  }
+//  def killQueueProcessing: Task[Unit] = promise.get.flatMap(_.succeed()).unit
+//
+//  def isQueueEmpty: ZIO[Any, Nothing, Boolean] = queue.size.map(_ == 0)
+//
+//  def receive(message: ActorMessage): Task[Unit] = {
+//    queue.offer(message).unit
+//  }
+//
+//}
