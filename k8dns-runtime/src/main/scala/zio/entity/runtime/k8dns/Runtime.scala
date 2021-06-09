@@ -1,16 +1,21 @@
 package zio.entity.runtime.k8dns
 
 import izumi.reflect.Tag
+import upickle.default
+import upickle.default.macroRW
 import zio.clock.Clock
 import zio.duration.{durationInt, Duration}
 import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{EntityProtocol, Tagging}
 import zio.entity.readside._
+import zio.memberlist.Memberlist.SwimEnv
+import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.{Memberlist, NodeAddress, Swim}
 import zio.stream.{Sink, ZStream}
 import zio.{memberlist, Chunk, Has, Ref, Task, UIO, ZHub, ZIO, ZLayer, ZManaged}
 
+import java.time.Instant
 import java.util.UUID
 
 object Runtime {
@@ -23,7 +28,7 @@ object Runtime {
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: EntityProtocol[Algebra, State, Event, Reject]
-  ): ZIO[Clock with Has[RuntimeServer] with Has[ExpiringCache[String, Combinators[_, _, _]]] with Has[Stores[Key, Event, State]], Throwable, Entity[
+  ): ZIO[Clock with Has[RuntimeServer] with Has[Stores[Key, Event, State]], Throwable, Entity[
     Key,
     Algebra,
     State,
@@ -48,10 +53,10 @@ object Runtime {
       } yield res).provideLayer(ZLayer.succeed(runtimeServer))
 
     for {
-      runtimeServer  <- ZIO.service[RuntimeServer]
-      stores         <- ZIO.service[Stores[Key, Event, State]]
-      clock          <- ZIO.service[Clock.Service]
-      combinatorsMap <- ZIO.service[ExpiringCache[String, Combinators[_, _, _]]]
+      runtimeServer <- ZIO.service[RuntimeServer]
+      stores        <- ZIO.service[Stores[Key, Event, State]]
+      clock         <- ZIO.service[Clock.Service]
+      combinatorsMap = runtimeServer.expiringCache
       combinators = AlgebraCombinatorConfig[Key, State, Event](
         stores.offsetStore,
         tagging,
@@ -102,6 +107,8 @@ trait RuntimeServer {
 
   def readSideProcessing: ReadSideProcessing
 
+  def expiringCache: ExpiringCache[String, Combinators[_, _, _]]
+
   def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit]
 
   def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit]
@@ -110,71 +117,86 @@ trait RuntimeServer {
 
 }
 
-case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityType: String, payload: Chunk[Byte]) {
+case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityType: String, payload: Chunk[Byte], createdAt: Instant) {
   def entityTypeAndId: String = s"${entityType}_$key"
 }
 
+//TODO: use different method to communicate, like grpc instead of memberlist udp protocol, put a timer in the message put in the queue and expire it accordingly with the timeout
 object SwimRuntimeServer {
-  val messageTimeout: Duration = 5.seconds
-  val live: ZLayer[Swim[SwimMessage] with Clock, Throwable, Has[RuntimeServer]] = (for {
-    swim                       <- ZManaged.service[Memberlist.Service[SwimMessage]]
-    clock                      <- ZManaged.service[Clock.Service]
-    hub                        <- ZHub.bounded[(NodeAddress, SwimMessage)](128).toManaged_
-    _                          <- memberlist.receive[SwimMessage].run(Sink.fromHub(hub)).toManaged_
-    listeners                  <- Ref.make[Map[String, (NodeAddress, SwimMessage) => Task[Unit]]](Map.empty).toManaged_
-    receiveMessageSubscription <- hub.subscribe
-    _ <- ZStream
-      .fromQueue(receiveMessageSubscription)
-      .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, swimMessage) =>
-        for {
-          listener <- listeners.get
-          currentListener = listener.get(swimMessage.entityType)
-          _ <- currentListener.get.apply(nodeAddress, swimMessage)
-        } yield ()
-      }
-      .runDrain
-      .toManaged_
-      .fork
-  } yield new RuntimeServer {
+  implicit val instantReader: default.ReadWriter[Instant] =
+    upickle.default.readwriter[Long].bimap[Instant](a => a.toEpochMilli, milli => Instant.ofEpochMilli(milli))
 
-    val readSideProcessing: ReadSideProcessing = new SwimReadSideProcessing(swim, clock)
-    // subscribe to hub that receive message, has a cache of combinators by entity and key and has an eviction strategy
+  implicit val swimMessage: ByteCodec[SwimMessage] =
+    ByteCodec.fromReadWriter[SwimMessage](macroRW[SwimMessage])
 
-    override def send(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]] = {
-      (for {
-        dequeue     <- hub.subscribe
-        activeNodes <- memberlist.nodes[SwimMessage].toManaged_
-        nodeToUse = ShardLogic.getShardNode(key, activeNodes.toList)
-        uuid = UUID.randomUUID()
-        _ <- memberlist
-          .send[SwimMessage](
-            SwimMessage(invocationId = uuid, response = false, key = key, entityType = entityType, payload = payload),
-            nodeToUse
-          )
-          .toManaged_
-        // TODO not sure if accumulates from subscribe or from stream
-        element <- ZStream
-          .fromQueue(dequeue.filterOutput { case (address, message) => message.invocationId.toString == uuid.toString && message.response })
-          .runHead
-          .timeout(messageTimeout)
-          .map(_.flatten)
-          .toManaged_
-      } yield {
-        element match {
-          case Some((from, payload)) => payload.payload
-          case None                  => Chunk.empty
+  def live(connectionTimeout: Duration, expireAfter: Duration, checkEvery: Duration): ZLayer[SwimEnv, Throwable, Has[RuntimeServer]] =
+    (for {
+      swim                       <- ZManaged.service[Memberlist.Service[SwimMessage]]
+      clock                      <- ZManaged.service[Clock.Service]
+      newExpiringCache           <- ZManaged.fromEffect(ExpiringCache.build[String, Combinators[_, _, _]](expireAfter, checkEvery))
+      hub                        <- ZHub.bounded[(NodeAddress, SwimMessage)](128).toManaged_
+      _                          <- memberlist.receive[SwimMessage].run(Sink.fromHub(hub)).toManaged_
+      listeners                  <- Ref.make[Map[String, (NodeAddress, SwimMessage) => Task[Unit]]](Map.empty).toManaged_
+      receiveMessageSubscription <- hub.subscribe
+      _ <- ZStream
+        .fromQueue(receiveMessageSubscription)
+        .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, swimMessage) =>
+          zio.clock.instant.flatMap { now =>
+            if (swimMessage.createdAt.toEpochMilli + connectionTimeout.toMillis < now.toEpochMilli) UIO.unit
+            else
+              for {
+                listener <- listeners.get
+                currentListener = listener.get(swimMessage.entityType)
+                _ <- currentListener.get.apply(nodeAddress, swimMessage)
+              } yield ()
+          }
         }
-      }).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
-    }.useNow
+        .runDrain
+        .toManaged_
+        .fork
+    } yield new RuntimeServer {
 
-    override def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit] =
-      memberlist.send(swimMessage, nodeAddress).provideLayer(ZLayer.succeed(swim))
+      val readSideProcessing: ReadSideProcessing = new SwimReadSideProcessing(swim, clock)
+      // subscribe to hub that receive message, has a cache of combinators by entity and key and has an eviction strategy
 
-    override def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit] =
-      listeners.update { old =>
-        old + (entityType -> messageReceivedForMe)
-      }
-  }).toLayer
+      override def send(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]] = {
+        (for {
+          dequeue     <- hub.subscribe
+          activeNodes <- memberlist.nodes[SwimMessage].toManaged_
+          now         <- ZManaged.fromEffect(zio.clock.instant)
+          nodeToUse = ShardLogic.getShardNode(key, activeNodes.toList)
+          uuid = UUID.randomUUID()
+          _ <- memberlist
+            .send[SwimMessage](
+              SwimMessage(invocationId = uuid, response = false, key = key, entityType = entityType, payload = payload, now),
+              nodeToUse
+            )
+            .toManaged_
+          // TODO not sure if accumulates from subscribe or from stream
+          element <- ZStream
+            .fromQueue(dequeue.filterOutput { case (address, message) => message.invocationId.toString == uuid.toString && message.response })
+            .runHead
+            .timeout(connectionTimeout)
+            .map(_.flatten)
+            .toManaged_
+        } yield {
+          element match {
+            case Some((from, payload)) => payload.payload
+            case None                  => Chunk.empty
+          }
+        }).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
+      }.useNow
+
+      override def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit] =
+        memberlist.send(swimMessage, nodeAddress).provideLayer(ZLayer.succeed(swim))
+
+      override def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit] =
+        listeners.update { old =>
+          old + (entityType -> messageReceivedForMe)
+        }
+
+      val expiringCache: ExpiringCache[String, Combinators[_, _, _]] = newExpiringCache
+    }).provideSomeLayer[SwimEnv](Memberlist.live).toLayer
 }
 
 object ShardLogic {
@@ -202,7 +224,7 @@ class SwimReadSideProcessing(swim: Memberlist.Service[SwimMessage], clock: Clock
       _     <- state.set(kill)
       _ <- memberlist
         .events[SwimMessage]
-        .debounce(500.millis)
+        .debounce(300.millis)
         .foreach { _ =>
           for {
             killel  <- state.get

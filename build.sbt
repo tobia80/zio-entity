@@ -81,12 +81,15 @@ lazy val `k8dns-runtime` = module("zio-entity-k8dnsruntime", "k8dns-runtime", "k
   .settings(libraryDependencies ++= k8dnsDeps)
   .settings(commonProtobufSettings)
 
+lazy val `benchmarks` = module("benchmarks", "benchmarks", "Benchmarks")
+  .dependsOn(`core`, `k8dns-runtime`, `akka-runtime`, `postgres`)
+
 lazy val docs = project       // new documentation project
   .in(file("zio-entity-docs")) // important: it must not be docs/
   .dependsOn(`core`, `akka-runtime`, `postgres`)
   .enablePlugins(MdocPlugin)
 
-aggregateProjects(`core`, `akka-runtime`, `k8dns-runtime`, `postgres`)
+aggregateProjects(`core`, `akka-runtime`, `k8dns-runtime`, `postgres`, `benchmarks`)
 
 ThisBuild / parallelExecution := false
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")

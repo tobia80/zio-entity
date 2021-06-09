@@ -48,7 +48,10 @@ object ExpiringCache {
   def get[Key: Tag, Value: Tag](key: Key): ZIO[Has[ExpiringCache[Key, Value]], Nothing, Option[Value]] = ZIO.accessM(_.get.get(key))
   def add[Key: Tag, Value: Tag](element: (Key, Value)): ZIO[Has[ExpiringCache[Key, Value]], Nothing, Unit] = ZIO.accessM(_.get.add(element))
 
-  def live[Key: Tag, Value: Tag](expireAfter: Duration, checkEvery: Duration): ZLayer[Clock, Nothing, Has[ExpiringCache[Key, Value]]] = (for {
+  def live[Key: Tag, Value: Tag](expireAfter: Duration, checkEvery: Duration): ZLayer[Clock, Nothing, Has[ExpiringCache[Key, Value]]] =
+    build[Key, Value](expireAfter, checkEvery).toLayer
+
+  def build[Key: Tag, Value: Tag](expireAfter: Duration, checkEvery: Duration): ZIO[Clock, Nothing, ExpiringCache[Key, Value]] = for {
     state <- Ref.make(ExpirableMap.empty[Key, Value](expireAfter))
     clock <- ZIO.service[Clock.Service]
     _ <- ZStream
@@ -73,5 +76,5 @@ object ExpiringCache {
       now <- clock.instant
       _   <- state.update(oldMap => oldMap + (element, now))
     } yield ()
-  }).toLayer
+  }
 }
