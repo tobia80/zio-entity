@@ -122,20 +122,29 @@ case class CountIncremented(number: Int) extends CountEvent
 
 case class CountDecremented(number: Int) extends CountEvent
 
-class CounterCommandHandler(combinators: Combinators[Int, CountEvent, String]) {
-  import combinators._
-  
+trait Counter {
   @MethodId(1)
-  def increase(number: Int): IO[String, Int] = read flatMap { res =>
+  def increase(number: Int): IO[String, Int]
+
+  @MethodId(2)
+  def decrease(number: Int): IO[String, Int]
+
+  @MethodId(4)
+  def getValue: IO[String, Int]
+}
+
+class CounterCommandHandler(combinators: Combinators[Int, CountEvent, String]) extends Counter {
+  import combinators._
+  def increase(number: Int): IO[String, Int] =
+    read flatMap { res =>
       append(CountIncremented(number)).as(res + number)
     }
 
-  @MethodId(2)
-  def decrease(number: Int): IO[String, Int] = read flatMap { res =>
+  def decrease(number: Int): IO[String, Int] =
+    read flatMap { res =>
       append(CountDecremented(number)).as(res - number)
     }
 
-  @MethodId(3)
   def getValue: IO[String, Int] = read
 }
 
