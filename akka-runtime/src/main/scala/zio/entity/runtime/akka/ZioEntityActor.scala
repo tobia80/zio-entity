@@ -5,7 +5,7 @@ import akka.cluster.sharding.ShardRegion
 import izumi.reflect.Tag
 import zio.entity.core._
 import zio.entity.data.{CommandInvocation, CommandResult, EntityProtocol, Invocation}
-import zio.{Has, Runtime, UIO, ULayer, ZIO, ZLayer}
+import zio.{Chunk, Has, Runtime, UIO, ULayer, ZIO, ZLayer}
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -16,14 +16,14 @@ object ZioEntityActor {
   def props[Key: StringDecoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
-  )(implicit protocol: EntityProtocol[Algebra, State, Event, Reject]): Props =
+  )(implicit protocol: EntityProtocol[Algebra, Reject]): Props =
     Props(new ZioEntityActor[Key, Algebra, State, Event, Reject](eventSourcedBehaviour, algebraCombinatorConfig))
 }
 
 private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
   eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
   algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event]
-)(implicit protocol: EntityProtocol[Algebra, State, Event, Reject])
+)(implicit protocol: EntityProtocol[Algebra, Reject])
     extends Actor
     with Stash
     with ActorLogging {
@@ -46,27 +46,25 @@ private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event
   //TODO manage stashed messages
   override def receive: Receive = onActions
 
-  private val invocation: Invocation[State, Event, Reject] =
-    protocol.server(eventSourcedBehaviour.algebra, eventSourcedBehaviour.errorHandler)
+  private val invocation: UIO[Invocation] = algebraCombinatorsWithKeyResolved.flatMap { combinator =>
+    UIO.succeed(protocol.server(eventSourcedBehaviour.algebra(combinator), eventSourcedBehaviour.errorHandler))
+  }
 
-  private val runtime = Runtime.unsafeFromLayer(algebraCombinatorsWithKeyResolved.toLayer)
+//  private val runtime = Runtime.unsafeFromLayer(algebraCombinatorsWithKeyResolved.toLayer)
   // here key is available, so at this level we can store the state of the algebra
   private def onActions: Receive = {
     case CommandInvocation(bytes) =>
-      val resultToSendBack: Future[CommandResult] = runtime
-        .unsafeRunToFuture(
-          (for {
-            combinators <- ZIO.environment[Has[Combinators[State, Event, Reject]]]
-            result <- invocation
-              .call(bytes)
-              .provide(combinators)
-              .mapError { reject =>
-                log.error("Failed to decode invocation", reject)
-                sender() ! Status.Failure(reject)
-                reject
-              }
-          } yield result)
-        )
+      val resultToSendBack: Future[CommandResult] = zio.Runtime.default
+        .unsafeRunToFuture(for {
+          invoc <- invocation
+          result <- invoc
+            .call(bytes)
+            .mapError { reject =>
+              log.error("Failed to decode invocation", reject)
+              sender() ! Status.Failure(reject)
+              reject
+            }
+        } yield result)
         .map(replyBytes => CommandResult(replyBytes))(context.dispatcher)
       val sendingActor = sender()
       resultToSendBack.onComplete {

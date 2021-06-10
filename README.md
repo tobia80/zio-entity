@@ -96,8 +96,8 @@ Interacting with entities is very simple, and they behave like normal ZIO effect
 ```scala
 for {
   counter <- entity[String, Counter, Int, CountEvent, String]
-  res <- counter("key")(_.increase(3))
-  state <- counter("key")(_.getValue)
+  res <- counter("key").increase(3)
+  state <- counter("key").getValue
 } yield state
 
 ```
@@ -122,25 +122,21 @@ case class CountIncremented(number: Int) extends CountEvent
 
 case class CountDecremented(number: Int) extends CountEvent
 
-class CounterCommandHandler {
-  type EIO[Result] = Combinators.EIO[Int, CountEvent, String, Result]
-
+class CounterCommandHandler(combinators: Combinators[Int, CountEvent, String]) {
+  import combinators._
+  
   @MethodId(1)
-  def increase(number: Int): EIO[Int] = combinators { c =>
-    c.read flatMap { res =>
-      c.append(CountIncremented(number)).as(res + number)
+  def increase(number: Int): IO[String, Int] = read flatMap { res =>
+      append(CountIncremented(number)).as(res + number)
     }
-  }
 
   @MethodId(2)
-  def decrease(number: Int): EIO[Int] = combinators { c =>
-    c.read flatMap { res =>
-      c.append(CountDecremented(number)).as(res - number)
+  def decrease(number: Int): IO[String, Int] = read flatMap { res =>
+      append(CountDecremented(number)).as(res - number)
     }
-  }
 
   @MethodId(3)
-  def getValue: EIO[Int] = combinators(_.read)
+  def getValue: IO[String, Int] = read
 }
 
 ```
@@ -162,8 +158,8 @@ val eventHandlerLogic: Fold[Int, CountEvent] = Fold(
 Define the rpc protocol with the Command handler, the state, the event and the error types:
 
 ```scala
-  implicit val counterProtocol: EntityProtocol[CounterCommandHandler, Int, CountEvent, String] =
-  RpcMacro.derive[CounterCommandHandler, Int, CountEvent, String]
+  implicit val counterProtocol: EntityProtocol[CounterCommandHandler, String] =
+  RpcMacro.derive[CounterCommandHandler, String]
 
 ```
 
@@ -174,7 +170,7 @@ Choose the Runtime and build layer
   
   private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]] =
     (Clock.live and stores and Runtime.actorSettings("Test")) to Runtime
-      .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+      .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage))
       .toLayer
 
 ```

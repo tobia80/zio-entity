@@ -16,9 +16,9 @@ object LocalRuntime {
     combinatorMap: Ref[Map[Key, UIO[Combinators[State, Event, Reject]]]],
     clock: Clock.Service
   ): UIO[Entity[Key, Algebra, State, Event, Reject]] = ZIO.runtime.map { runtime =>
-    val fn: Key => (Algebra, Combinators[State, Event, Reject]) = { key: Key =>
+    val fn: Key => Algebra = { key: Key =>
       val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
-      val result: UIO[(Algebra, Combinators[State, Event, Reject])] = for {
+      val result: UIO[Algebra] = for {
         cache <- combinatorMap.get
         combinator <- cache.getOrElse(
           key, {
@@ -28,16 +28,13 @@ object LocalRuntime {
             combinatorMap.set(newMap) *> newComb
           }
         )
-      } yield eventSourcedBehaviour.algebra -> combinator
+      } yield eventSourcedBehaviour.algebra(combinator)
       runtime.unsafeRun(result)
     }
     new Entity[Key, Algebra, State, Event, Reject] {
 
-      override def apply[R <: Has[_], Result](key: Key)(f: Algebra => ZIO[R, Reject, Result])(implicit
-        ev1: Has[Combinators[State, Event, Reject]] <:< R
-      ): ZIO[Any, Reject, Result] = {
-        val (algebra, combinators) = fn(key)
-        f(algebra).provideLayer(ZLayer.succeed(combinators))
+      override def apply(key: Key): Algebra = {
+        fn(key)
       }
 
       override def readSideStream(

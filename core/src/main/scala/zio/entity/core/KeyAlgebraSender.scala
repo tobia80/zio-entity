@@ -12,7 +12,7 @@ object KeyAlgebraSender {
       Throwable => Reject
     ) => ZStream[Any, Reject, KillSwitch]
   )(senderFn: (Key, Chunk[Byte]) => Task[Any], errorHandler: Throwable => Reject)(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject],
+    protocol: EntityProtocol[Algebra, Reject],
     stateTag: Tag[State],
     eventTag: Tag[Event],
     rejectTag: Tag[Reject]
@@ -39,12 +39,9 @@ object KeyAlgebraSender {
         }
       }
 
-      override def apply[R <: Has[_], Result](
+      override def apply(
         key: Key
-      )(f: Algebra => ZIO[R, Reject, Result])(implicit ev1: Has[Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = {
-        val algebra = fn(key)
-        f(algebra).provideLayer(Combinators.clientEmptyCombinator[State, Event, Reject])
-      }
+      ): Algebra = fn(key)
 
       override def readSideStream(
         readSideParams: ReadSideParams[Key, Event, Reject],
