@@ -60,6 +60,7 @@ object ExpiringCache {
         for {
           now <- clock.instant
           _ <- state.update { old =>
+            println("Expiring...")
             old.expire(now)
           }
         } yield ()
