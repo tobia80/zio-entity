@@ -36,7 +36,7 @@ object TestEntityRuntime {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, Reject]
   ): ZLayer[Clock with Has[Stores[Key, Event, State] with TestEventStore[Key, Event]], Throwable, Has[TestEntity[Key, Algebra, State, Event, Reject]]] = {
 
     (for {
@@ -60,9 +60,9 @@ object TestEntityRuntime {
       probe <- EntityProbe.make[Key, State, Event](eventSourcedBehaviour.eventHandler)
       hub   <- Hub.unbounded[Unit]
       probedEntity = new TestEntity[Key, Algebra, State, Event, Reject] {
-        override def apply[R <: Has[_], Result](
+        override def apply(
           key: Key
-        )(f: Algebra => ZIO[R, Reject, Result])(implicit ev1: Has[Combinators[State, Event, Reject]] <:< R): ZIO[Any, Reject, Result] = entity.apply(key)(f)
+        ): Algebra = entity.apply(key)
 
         override def probeForKey(key: Key): KeyedProbeOperations[State, Event] = probe.probeForKey(key)
 

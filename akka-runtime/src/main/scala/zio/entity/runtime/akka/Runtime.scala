@@ -39,7 +39,7 @@ object Runtime {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, Reject]
   ): ZIO[Clock with Has[ActorSystem] with Has[RuntimeSettings] with Has[ReadSideSettings] with Has[Stores[Key, Event, State]], Throwable, Entity[
     Key,
     Algebra,
@@ -69,7 +69,7 @@ object Runtime {
     committableJournalQuery: CommittableJournalQuery[Long, Key, Event],
     readSideSettings: ReadSideSettings
   )(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, Reject]
   ): ZIO[Has[ActorSystem] with Has[RuntimeSettings], Throwable, Entity[Key, Algebra, State, Event, Reject]] = ZIO.access { layer =>
     val system = layer.get[ActorSystem]
     val settings = layer.get[RuntimeSettings]

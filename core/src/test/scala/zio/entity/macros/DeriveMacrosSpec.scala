@@ -2,15 +2,14 @@ package zio.entity.macros
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
-import zio.entity.core.Combinators
 import zio.entity.data.EntityProtocol
-import zio.{Chunk, Has, IO, ZIO}
+import zio.{Chunk, IO}
 
 class DeriveMacrosSpec extends AnyFreeSpec {
 
   "Client macro" - {
     "called proto macro" in {
-      val _: EntityProtocol[AlgebraImpl, String, String, String] = RpcMacro.derive[AlgebraImpl, String, String, String]
+      val _: EntityProtocol[AlgebraImpl, String] = RpcMacro.derive[AlgebraImpl, String]
     }
   }
 
@@ -40,7 +39,7 @@ class DeriveMacrosSpec extends AnyFreeSpec {
 }
 
 class AlgebraImpl {
-  type SIO[Return] = ZIO[Has[Combinators[String, String, String]], String, Return]
+  type SIO[Return] = IO[String, Return]
 
   def operation1(param: String): SIO[String] = IO.succeed(param)
 }

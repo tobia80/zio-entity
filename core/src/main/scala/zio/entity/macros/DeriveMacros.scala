@@ -4,6 +4,7 @@ import zio.entity.annotations.MethodId
 
 import scala.reflect.macros.blackbox
 
+//TODO preserve the R in the methods
 class DeriveMacros(val c: blackbox.Context) {
 
   import c.internal._
@@ -74,8 +75,6 @@ class DeriveMacros(val c: blackbox.Context) {
 
   def stubMethodsForClient(
     methods: Iterable[Method],
-    state: c.universe.Type,
-    event: c.universe.Type,
     reject: c.universe.Type
   ): Iterable[c.universe.Tree] = {
     methods.zipWithIndex.map { case (method @ Method(_, _, paramList, TypeRef(_, _, outParams), _, hint), index) =>
@@ -118,7 +117,7 @@ class DeriveMacros(val c: blackbox.Context) {
       }
 
       val newBody =
-        q""" ZIO.accessM { _: Has[Combinators[$state, $event, $reject]] =>
+        q""" ZIO.accessM { _ =>
                        val hint = $hintToUse
                        
                        val schemaResult = DeriveSchema.gen[Either[$reject, $out]]
@@ -128,21 +127,16 @@ class DeriveMacros(val c: blackbox.Context) {
     }
   }
 
-  def derive[Algebra, State, Event, Reject](implicit
+  def derive[Algebra, Reject](implicit
     algebraTag: c.WeakTypeTag[Algebra],
-    statetag: c.WeakTypeTag[State],
-    eventtag: c.WeakTypeTag[Event],
     rejecttag: c.WeakTypeTag[Reject]
   ): c.Tree = {
     import c.universe._
 
     val algebra: c.universe.Type = algebraTag.tpe.typeConstructor.dealias
-    val state: c.universe.Type = statetag.tpe.typeConstructor.dealias
-    val event: c.universe.Type = eventtag.tpe.typeConstructor.dealias
     val reject: c.universe.Type = rejecttag.tpe.typeConstructor.dealias
     val methods: Iterable[Method] = overridableMethodsOf(algebra)
-    val stubbedMethods: Iterable[Tree] = stubMethodsForClient(methods, state, event, reject)
-    // function hint, bitvector to Task[bitvector]
+    val stubbedMethods: Iterable[Tree] = stubMethodsForClient(methods, reject)
     val serverHintBitVectorFunction: Tree = {
       methods.zipWithIndex.foldLeft[Tree](q"""throw new IllegalArgumentException(s"Unknown type tag $$hint")""") { case (acc, (method, index)) =>
         val Method(name, _, paramList, TypeRef(_, _, outParams), _, hint) = method
@@ -187,24 +181,23 @@ class DeriveMacros(val c: blackbox.Context) {
       }
     }
 
-    q""" new EntityProtocol[$algebra, $state, $event, $reject] {
+    q""" new EntityProtocol[$algebra, $reject] {
             import zio.entity.data.Invocation
             import zio.schema.DeriveSchema
             import zio.schema.codec.ProtobufCodec
             import zio._
-            import zio.entity.core.Combinators
 
              private val mainSchema = DeriveSchema.gen[(String, Chunk[Byte])]
              val client: (Chunk[Byte] => Task[Chunk[Byte]], Throwable => $reject) => $algebra =
                (commFn: Chunk[Byte] => Task[Chunk[Byte]], errorHandler: Throwable => $reject) =>
                  new $algebra { ..$stubbedMethods }
 
-             val server: ($algebra, Throwable => $reject) => Invocation[$state, $event, $reject] =
+             val server: ($algebra, Throwable => $reject) => Invocation =
                (algebra: $algebra, errorHandler: Throwable => $reject) =>
-                 new Invocation[$state, $event, $reject] {
-                   private def buildVectorFromHint(hint: String, arguments: Chunk[Byte]): ZIO[Has[Combinators[$state, $event, $reject]], Throwable, Chunk[Byte]] = { $serverHintBitVectorFunction }
+                 new Invocation {
+                   private def buildVectorFromHint(hint: String, arguments: Chunk[Byte]): Task[Chunk[Byte]] = { $serverHintBitVectorFunction }
 
-                   override def call(message: Chunk[Byte]): ZIO[Has[Combinators[$state, $event, $reject]], Throwable, Chunk[Byte]] = {
+                   override def call(message: Chunk[Byte]): Task[Chunk[Byte]] = {
                      // for each method extract the name, it could be a sequence number for the method
                        // according to the hint, extract the arguments
                        for {

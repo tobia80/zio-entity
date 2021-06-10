@@ -1,13 +1,10 @@
 package zio.entity.core
 
 import zio.clock.Clock
-import zio.entity.core.Combinators._
-import zio.entity.core.CounterCommandHandler.EIO
 import zio.entity.core.Fold.impossible
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
-import zio.entity.annotations.MethodId
 import zio.entity.readside.ReadSideParams
 import zio.entity.test.TestEntityRuntime._
 import zio.entity.test.TestMemoryStores
@@ -18,21 +15,23 @@ import zio.{IO, Ref, UIO}
 
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
-  private val counterCommandHandler: Counter = CounterCommandHandler
   import CounterEntity.counterProtocol
   private val layer = Clock.any and TestMemoryStores.live[String, CountEvent, Int]() to
-    testEntity(CounterEntity.tagging, EventSourcedBehaviour(counterCommandHandler, CounterEntity.eventHandlerLogic, _.getMessage))
+    testEntity(
+      CounterEntity.tagging,
+      EventSourcedBehaviour[Counter, Int, CountEvent, String](new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage)
+    )
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
     testM("receives commands, produces events and updates state") {
       (for {
         counter              <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
-        res                  <- counter("key")(_.increase(3))
-        finalRes             <- counter("key")(_.decrease(2))
-        secondEntityRes      <- counter("secondKey")(_.increase(1))
-        secondEntityFinalRes <- counter("secondKey")(_.increase(5))
+        res                  <- counter("key").increase(3)
+        finalRes             <- counter("key").decrease(2)
+        secondEntityRes      <- counter("secondKey").increase(1)
+        secondEntityFinalRes <- counter("secondKey").increase(5)
         events               <- counter.probeForKey("key").events
-        fromState            <- counter("key")(_.getValue)
+        fromState            <- counter("key").getValue
       } yield {
         assert(events)(equalTo(List(CountIncremented(3), CountDecremented(2)))) &&
         assert(res)(equalTo(3)) &&
@@ -48,9 +47,9 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
         state   <- Ref.make(0)
         killSwitch <- counter
           .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(state, _, _)), _.getMessage)
-        _            <- counter("key")(_.increase(2))
-        _            <- counter("key")(_.increase(3))
-        _            <- counter("key")(_.decrease(1))
+        _            <- counter("key").increase(2)
+        _            <- counter("key").increase(3)
+        _            <- counter("key").decrease(1)
         _            <- counter.triggerReadSideProcessing(1)
         valueOfState <- state.get
       } yield (assert(valueOfState)(equalTo(2)))).provideSomeLayer[TestEnvironment](layer)
@@ -63,42 +62,32 @@ case class CountIncremented(number: Int) extends CountEvent
 case class CountDecremented(number: Int) extends CountEvent
 
 trait Counter {
-  @MethodId(1)
-  def increase(number: Int): EIO[Int]
+  def increase(number: Int): IO[String, Int]
 
-  @MethodId(2)
-  def decrease(number: Int): EIO[Int]
+  def decrease(number: Int): IO[String, Int]
 
-  @MethodId(3)
-  def noop: EIO[Unit]
+  def noop: IO[String, Unit]
 
-  @MethodId(4)
-  def getValue: EIO[Int]
+  def getValue: IO[String, Int]
 }
 
-object CounterCommandHandler extends Counter {
-  type EIO[Result] = Combinators.EIO[Int, CountEvent, String, Result]
+class CounterCommandHandler(combinators: Combinators[Int, CountEvent, String]) extends Counter {
+  import combinators._
 
-  def increase(number: Int): EIO[Int] = combinators { c =>
-    c.read flatMap { res =>
-      c.append(CountIncremented(number)).as(res + number)
-    }
+  def increase(number: Int): IO[String, Int] = read flatMap { res =>
+    append(CountIncremented(number)).as(res + number)
   }
 
-  def decrease(number: Int): EIO[Int] = combinators { c =>
-    c.read flatMap { res =>
-      c.append(CountDecremented(number)).as(res - number)
-    }
+  def decrease(number: Int): IO[String, Int] = read flatMap { res =>
+    append(CountDecremented(number)).as(res - number)
   }
 
-  def noop: EIO[Unit] = combinators(_.ignore)
+  def noop: IO[String, Unit] = ignore
 
-  def getValue: EIO[Int] = combinators(_.read)
+  def getValue: IO[String, Int] = read
 }
 
 object CounterEntity {
-  type Counters = String => Counter
-
   val tagging: Const[String] = Tagging.const[String](EventTag("Counter"))
 
   val eventHandlerLogic: Fold[Int, CountEvent] = Fold(
@@ -110,8 +99,8 @@ object CounterEntity {
     }
   )
 
-  implicit val counterProtocol: EntityProtocol[Counter, Int, CountEvent, String] =
-    RpcMacro.derive[Counter, Int, CountEvent, String]
+  implicit val counterProtocol: EntityProtocol[Counter, String] =
+    RpcMacro.derive[Counter, String]
 
 }
 
