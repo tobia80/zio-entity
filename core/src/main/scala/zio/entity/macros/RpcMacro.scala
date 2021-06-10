@@ -6,6 +6,6 @@ import scala.language.experimental.macros
 
 object RpcMacro {
 
-  def derive[Algebra, State, Event, Reject]: EntityProtocol[Algebra, State, Event, Reject] = macro DeriveMacros.derive[Algebra, State, Event, Reject]
+  def derive[Algebra, Reject]: EntityProtocol[Algebra, Reject] = macro DeriveMacros.derive[Algebra, Reject]
 
 }

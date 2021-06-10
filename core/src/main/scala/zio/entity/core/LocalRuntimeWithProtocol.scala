@@ -14,7 +14,7 @@ object LocalRuntimeWithProtocol {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, Reject]
   ): ZIO[Clock with Has[Stores[Key, Event, State]], Throwable, Entity[Key, Algebra, State, Event, Reject]] = {
     for {
       clock          <- ZIO.service[Clock.Service]
@@ -36,7 +36,7 @@ object LocalRuntimeWithProtocol {
     combinatorMap: Ref[Map[Key, UIO[Combinators[State, Event, Reject]]]],
     clock: Clock.Service,
     journalQuery: CommittableJournalQuery[Long, Key, Event]
-  )(implicit protocol: EntityProtocol[Algebra, State, Event, Reject]): UIO[Entity[Key, Algebra, State, Event, Reject]] = {
+  )(implicit protocol: EntityProtocol[Algebra, Reject]): UIO[Entity[Key, Algebra, State, Event, Reject]] = {
     val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
     val subscription: (ReadSideParams[Key, Event, Reject], Throwable => Reject) => ZStream[Any, Reject, KillSwitch] =
       (readSideParams, errorHandler) =>
@@ -59,11 +59,12 @@ object LocalRuntimeWithProtocol {
                   }
             }
           } yield combinatorRetrieved
-          protocol
-            .server(eventSourcedBehaviour.algebra, errorHandler)
-            .call(bytes)
-            .map(CommandResult)
-            .provideLayer(algebraCombinators.toLayer)
+          algebraCombinators.flatMap { combinator =>
+            protocol
+              .server(eventSourcedBehaviour.algebra(combinator), errorHandler)
+              .call(bytes)
+              .map(CommandResult)
+          }
         },
         errorHandler
       )

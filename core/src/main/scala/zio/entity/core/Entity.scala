@@ -5,9 +5,9 @@ import zio.stream.ZStream
 import zio.{Has, IO, Tag, Task, URIO, ZIO}
 
 trait Entity[Key, Algebra, State, Event, Reject] {
-  def apply[R <: Has[_], Result](key: Key)(f: Algebra => ZIO[R, Reject, Result])(implicit
-    ev1: zio.Has[zio.entity.core.Combinators[State, Event, Reject]] <:< R
-  ): IO[Reject, Result]
+
+  def apply(key: Key): Algebra
+
   case class TerminateSubscription(task: IO[Reject, Unit])
 
   def readSideSubscription(
