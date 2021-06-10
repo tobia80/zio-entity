@@ -51,7 +51,7 @@ tests can run in ms, they are deterministic, fast and easy to reason.
 Calling an Entity is as easy as writing
 
 ```scala
-accounts(fooAccount)(_.credit(10 EUR))
+accounts(fooAccount).credit(10 EUR)
 ```
 
 ### RPC style Entities
@@ -158,8 +158,8 @@ val eventHandlerLogic: Fold[Int, CountEvent] = Fold(
 Define the rpc protocol with the Command handler, the state, the event and the error types:
 
 ```scala
-  implicit val counterProtocol: EntityProtocol[CounterCommandHandler, String] =
-  RpcMacro.derive[CounterCommandHandler, String]
+  implicit val counterProtocol: EntityProtocol[Counter, String] =
+  RpcMacro.derive[Counter, String]
 
 ```
 
@@ -168,9 +168,9 @@ Choose the Runtime and build layer
 ```scala
   private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] = Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
   
-  private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, CounterCommandHandler, Int, CountEvent, String]]] =
+  private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, Counter, Int, CountEvent, String]]] =
     (Clock.live and stores and Runtime.actorSettings("Test")) to Runtime
-      .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour(new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage))
+      .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour[Counter, Int, CountEvent, String](new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage))
       .toLayer
 
 ```
