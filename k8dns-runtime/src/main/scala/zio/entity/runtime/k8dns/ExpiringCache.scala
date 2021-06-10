@@ -3,7 +3,7 @@ package zio.entity.runtime.k8dns
 import zio.clock.Clock
 import zio.duration.Duration
 import zio.stream.ZStream
-import zio.{Has, Ref, Schedule, Tag, UIO, ZIO, ZLayer}
+import zio.{Has, Ref, Schedule, Tag, Task, UIO, ZIO, ZLayer}
 
 import java.time.Instant
 import scala.collection.immutable.TreeSeqMap
@@ -39,13 +39,13 @@ object ExpirableMap {
 }
 
 trait ExpiringCache[-Key, Value] {
-  def get(key: Key): UIO[Option[Value]]
+  def get(key: Key): Task[Option[Value]]
 
   def add(element: (Key, Value)): UIO[Unit]
 }
 
 object ExpiringCache {
-  def get[Key: Tag, Value: Tag](key: Key): ZIO[Has[ExpiringCache[Key, Value]], Nothing, Option[Value]] = ZIO.accessM(_.get.get(key))
+  def get[Key: Tag, Value: Tag](key: Key): ZIO[Has[ExpiringCache[Key, Value]], Throwable, Option[Value]] = ZIO.accessM(_.get.get(key))
   def add[Key: Tag, Value: Tag](element: (Key, Value)): ZIO[Has[ExpiringCache[Key, Value]], Nothing, Unit] = ZIO.accessM(_.get.add(element))
 
   def live[Key: Tag, Value: Tag](expireAfter: Duration, checkEvery: Duration): ZLayer[Clock, Nothing, Has[ExpiringCache[Key, Value]]] =
@@ -66,11 +66,16 @@ object ExpiringCache {
       }
       .fork
   } yield new ExpiringCache[Key, Value] {
-    override def get(key: Key): UIO[Option[Value]] =
+    override def get(key: Key): Task[Option[Value]] =
       for {
         now <- clock.instant
-        res <- state.get.map(_.getAndUpdate(key, now))
-      } yield res.map(_._2)
+        res: Option[Value] <- state.modify { old =>
+          old.getAndUpdate(key, now) match {
+            case Some((newMap, value)) => Option(value) -> newMap
+            case _                     => None          -> old
+          }
+        }
+      } yield res
 
     override def add(element: (Key, Value)): UIO[Unit] = for {
       now <- clock.instant
