@@ -72,7 +72,7 @@ trait Counter {
   def decrease(number: Int): IO[String, Int]
 
   @MethodId(3)
-  def noop: UIO[Unit]
+  def noop: IO[String, Unit]
 
   @MethodId(4)
   def getValue: IO[String, Int]
@@ -91,7 +91,7 @@ class CounterCommandHandler(combinators: Combinators[Int, CountEvent, String]) e
       append(CountDecremented(number)).as(res - number)
     }
 
-  def noop: UIO[Unit] = ignore
+  def noop: IO[String, Unit] = ignore
 
   def getValue: IO[String, Int] = read
 }

@@ -46,17 +46,16 @@ private class ZioEntityActor[Key: StringDecoder: Tag, Algebra, State: Tag, Event
   //TODO manage stashed messages
   override def receive: Receive = onActions
 
-  private val invocation: UIO[Invocation] = algebraCombinatorsWithKeyResolved.flatMap { combinator =>
-    UIO.succeed(protocol.server(eventSourcedBehaviour.algebra(combinator), eventSourcedBehaviour.errorHandler))
+  private val invocation: UIO[Invocation] = algebraCombinatorsWithKeyResolved.map { combinator =>
+    protocol.server(eventSourcedBehaviour.algebra(combinator), eventSourcedBehaviour.errorHandler)
   }
-
-//  private val runtime = Runtime.unsafeFromLayer(algebraCombinatorsWithKeyResolved.toLayer)
+  private val runtime = Runtime.unsafeFromLayer(invocation.toLayer)
   // here key is available, so at this level we can store the state of the algebra
   private def onActions: Receive = {
     case CommandInvocation(bytes) =>
-      val resultToSendBack: Future[CommandResult] = zio.Runtime.default
+      val resultToSendBack: Future[CommandResult] = runtime
         .unsafeRunToFuture(for {
-          invoc <- invocation
+          invoc <- ZIO.service[Invocation]
           result <- invoc
             .call(bytes)
             .mapError { reject =>

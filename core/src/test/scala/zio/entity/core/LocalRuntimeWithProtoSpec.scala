@@ -5,7 +5,6 @@ import zio.entity.core.Fold.impossible
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
-import zio.entity.annotations.MethodId
 import zio.entity.readside.ReadSideParams
 import zio.entity.test.TestEntityRuntime._
 import zio.entity.test.TestMemoryStores
@@ -67,7 +66,7 @@ trait Counter {
 
   def decrease(number: Int): IO[String, Int]
 
-  def noop: UIO[Unit]
+  def noop: IO[String, Unit]
 
   def getValue: IO[String, Int]
 }
@@ -83,7 +82,7 @@ class CounterCommandHandler(combinators: Combinators[Int, CountEvent, String]) e
     append(CountDecremented(number)).as(res - number)
   }
 
-  def noop: UIO[Unit] = ignore
+  def noop: IO[String, Unit] = ignore
 
   def getValue: IO[String, Int] = read
 }
