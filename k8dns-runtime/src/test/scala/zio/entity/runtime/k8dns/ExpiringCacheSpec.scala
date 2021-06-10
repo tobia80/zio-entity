@@ -23,6 +23,8 @@ object ExpiringCacheSpec extends DefaultRunnableSpec {
         _    <- TestClock.adjust(5.seconds)
         res2 <- ExpiringCache.get[String, Int]("hello")
         res3 <- ExpiringCache.get[String, Int]("ok")
+        _    <- TestClock.adjust(20.seconds)
+        res2 <- ExpiringCache.get[String, Int]("hello")
       } yield (assertTrue(res.contains(2), res2.isEmpty, res3.contains(8)))).provideSomeLayer[TestEnvironment](live)
     )
   )

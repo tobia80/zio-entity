@@ -27,7 +27,7 @@ object Runtime {
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
-    protocol: EntityProtocol[Algebra, State, Event, Reject]
+    protocol: EntityProtocol[Algebra, Reject]
   ): ZIO[Clock with Has[RuntimeServer] with Has[Stores[Key, Event, State]], Throwable, Entity[
     Key,
     Algebra,
@@ -65,7 +65,7 @@ object Runtime {
       )
       onMessageReceive = { (nodeAddress: NodeAddress, swimMessage: SwimMessage) =>
         val key = implicitly[StringDecoder[Key]].decode(swimMessage.key)
-        val algebraCombinators: ZIO[Any, Exception, Combinators[State, Event, Reject]] = for {
+        val algebraCombinators: ZIO[Any, Throwable, Combinators[State, Event, Reject]] = for {
           keyToUse <- ZIO.fromOption(key).mapError(_ => new Exception("Cannot decode key"))
           keyInStringForm = implicitly[StringEncoder[Key]].encode(keyToUse)
           cache <- combinatorsMap.get(keyInStringForm)
@@ -82,10 +82,10 @@ object Runtime {
         } yield combinatorRetrieved
         // if empty create combinator and set in the cache
         for {
+          combinators <- algebraCombinators
           result <- protocol.server
-            .apply(eventSourcedBehaviour.algebra, eventSourcedBehaviour.errorHandler)
+            .apply(eventSourcedBehaviour.algebra(combinators), eventSourcedBehaviour.errorHandler)
             .call(swimMessage.payload)
-            .provideLayer(ZLayer.fromEffect(algebraCombinators))
           _ <- runtimeServer.sendAndForget(nodeAddress, swimMessage.copy(response = true, payload = result))
         } yield ()
       }
