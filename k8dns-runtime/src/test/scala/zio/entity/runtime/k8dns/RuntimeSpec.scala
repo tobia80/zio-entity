@@ -3,7 +3,6 @@ package zio.entity.runtime.k8dns
 import zio.clock.Clock
 import zio.duration.durationInt
 import zio.entity.annotations.MethodId
-import zio.entity.core.Combinators.combinators
 import zio.entity.core.Entity.entity
 import zio.entity.core.Fold.impossible
 import zio.entity.core._
@@ -11,18 +10,30 @@ import zio.entity.data.Tagging.Const
 import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.readside.ReadSideParams
+import zio.logging.Logging
 import zio.memberlist.Memberlist.SwimEnv
+import zio.memberlist.SwimConfig
+import zio.memberlist.discovery.Discovery
+import zio.nio.core.InetSocketAddress
 import zio.test.Assertion.equalTo
 import zio.test.TestAspect.sequential
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{Has, IO, UIO, ZEnv, ZLayer}
+import zio.{Has, IO, UIO, ZEnv, ZLayer, ZManaged}
 
-class RuntimeSpec extends DefaultRunnableSpec {
+import java.net.UnknownHostException
+
+object RuntimeSpec extends DefaultRunnableSpec {
   import CounterEntity.counterProtocol
   private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] = Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
 
-  private val swimEnv: ZLayer[Any, Nothing, SwimEnv] = ???
+  private val discovery: ZLayer[Any, UnknownHostException, Discovery] = ZLayer.fromManagedMany(for {
+    address <- ZManaged.fromEffect(InetSocketAddress.localHost(5557).map(Set(_)))
+    res     <- Discovery.staticList(address).build
+  } yield res)
+
+  private val swimEnv: ZLayer[ZEnv, Throwable, SwimEnv] =
+    Clock.any and Logging.console() and discovery and SwimConfig.fromEnv.mapError(_ => new Throwable("Problem with config"))
   private val runtimeServer: ZLayer[SwimEnv, Throwable, Has[RuntimeServer]] =
     SwimRuntimeServer.live(5.seconds, 5.seconds, 3.seconds)
 

@@ -20,8 +20,7 @@ import java.util.UUID
 
 object Runtime {
 
-  //TODO needs a cache and an eviction time (passivation) for receive management
-  // lazy passivation or active passivation?
+  //TODO switch to TCP, UDP is not suitable for reliable message passing
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     tagging: Tagging[Key],
