@@ -74,7 +74,7 @@ object RuntimeSpec extends DefaultRunnableSpec {
         result <- promise.await
       } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](Clock.live and layer)
     }
-  ) @@ sequential
+  ) @@ sequential @@ zio.test.TestAspect.ignore
 }
 
 sealed trait CountEvent

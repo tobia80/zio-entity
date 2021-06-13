@@ -21,7 +21,6 @@ val testDeps = Seq(
   "dev.zio" %% "zio-test-magnolia" % zio % Test
 )
 
-
 val allDeps = Seq(
   "dev.zio" %% "zio" % zio,
   "dev.zio" %% "zio-streams" % zio,
@@ -46,7 +45,9 @@ val akkaDeps = Seq(
 ) ++ testDeps
 
 val k8dnsDeps = Seq(
-  "dev.zio" %% "zio-memberlist" % "0.0.0+6-97eb0ea1+20210601-0929-SNAPSHOT"
+  "dev.zio" %% "zio-memberlist" % "0.0.0+6-97eb0ea1+20210601-0929-SNAPSHOT",
+  "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion,
+  "io.grpc" % "grpc-netty" % "1.34.0"
 ) ++ testDeps
 
 lazy val commonProtobufSettings = Seq(
