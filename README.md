@@ -57,7 +57,7 @@ accounts(fooAccount).credit(10 EUR)
 ### RPC style Entities
 
 DDD Entities, use some magic (aka macro) in order to allow RPC style invocation. Amount of boilerplate code is
-drastically reduced and an entity can be invoked as a normal class. Testing a Stemtity is a lot easier since it can be
+drastically reduced and an entity can be invoked as a normal class. Testing a Zio-Entity is a lot easier since it can be
 tested like normal code.
 
 The library will distribute the request in the cluster and serialize commands using either Scodec or Protobuf.
