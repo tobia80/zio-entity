@@ -1,10 +1,11 @@
 package zio.entity.runtime.k8dns
 
 import com.google.protobuf.ByteString
-import io.grpc.{ManagedChannelBuilder, Status}
-import scalapb.zio_grpc.ZManagedChannel
+import io.grpc.protobuf.services.ProtoReflectionService
+import io.grpc.{ManagedChannelBuilder, ServerBuilder, Status}
+import scalapb.zio_grpc.{ManagedServer, ServiceList, ZManagedChannel}
 import zio.ZManaged.Finalizer
-import zio.entity.runtime.k8dns.protocol.ZioProtocol.ProtoStreamerClient
+import zio.entity.runtime.k8dns.protocol.ZioProtocol.{ProtoStreamer, ProtoStreamerClient}
 import zio.entity.runtime.k8dns.protocol.ZioProtocol.ProtoStreamerClient.Service
 import zio.entity.runtime.k8dns.protocol.{InternalMessage, ZioProtocol}
 import zio.memberlist.NodeAddress
@@ -27,7 +28,6 @@ trait NodeMessagingProtocol {
 }
 
 object GrpcNodeMessagingProtocol {
-  case class ClientAndCallback(sendBack: InternalMessage => Task[InternalMessage])
   case class InvocationKey(id: UUID)
   // connect by node
   val live: ZLayer[Any, Throwable, Has[NodeMessagingProtocol]] = (for {
@@ -36,10 +36,7 @@ object GrpcNodeMessagingProtocol {
     queue       <- ZManaged.fromEffect(zio.Queue.unbounded[(NodeAddress, Message)])
     scope       <- ZManaged.scope
     // every time connect is called, means a new connection from the client, add to map, merge the input streams, put output streams in the map, when a node address goes down, remove from the map
-  } yield new NodeMessagingProtocol {
-
-    // TODO: start the server here
-    private val runtimeStreamer = new ZioProtocol.ProtoStreamer {
+    runtimeStreamer: ProtoStreamer = new ZioProtocol.ProtoStreamer {
       override def sendMessage(request: InternalMessage): ZIO[Any, Status, InternalMessage] = {
         //generate correlation id, set the map and send to stream
         (for {
@@ -52,6 +49,11 @@ object GrpcNodeMessagingProtocol {
         } yield InternalMessageConverter.toInternalMessage(res._1, res._2)).mapError(_ => Status.FAILED_PRECONDITION)
       }
     }
+    serviceList: ServiceList[Any] = ServiceList.add(runtimeStreamer)
+    _ <- ManagedServer.fromServiceList(ServerBuilder.forPort(9000), serviceList)
+  } yield new NodeMessagingProtocol {
+
+    // TODO: start the server here
     // client call, find channel and use it
     override def ask(nodeAddress: NodeAddress, message: Message): Task[Message] = {
       val internalMessage = InternalMessageConverter.toInternalMessage(nodeAddress, message)
