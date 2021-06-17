@@ -62,7 +62,7 @@ object Runtime {
         stores.journalStore,
         stores.snapshotting
       )
-      onMessageReceive = { (nodeAddress: NodeAddress, swimMessage: SwimMessage) =>
+      onMessageReceive = { (nodeAddress: NodeAddress, swimMessage: Message) =>
         val key = implicitly[StringDecoder[Key]].decode(swimMessage.key)
         val algebraCombinators: ZIO[Any, Throwable, Combinators[State, Event, Reject]] = for {
           keyToUse <- ZIO.fromOption(key).mapError(_ => new Exception("Cannot decode key"))
@@ -85,7 +85,7 @@ object Runtime {
           result <- protocol.server
             .apply(eventSourcedBehaviour.algebra(combinators), eventSourcedBehaviour.errorHandler)
             .call(swimMessage.payload)
-          _ <- runtimeServer.sendAndForget(nodeAddress, swimMessage.copy(response = true, payload = result))
+          _ <- runtimeServer.answer(nodeAddress, swimMessage.copy(payload = result))
         } yield ()
       }
       _ <- runtimeServer.registerListener(typeName, onMessageReceive)
@@ -94,7 +94,7 @@ object Runtime {
       { (key, payload) =>
         val keyString = implicitly[StringEncoder[Key]].encode(key)
 
-        runtimeServer.send(keyString, typeName, payload)
+        runtimeServer.ask(keyString, typeName, payload)
       },
       eventSourcedBehaviour.errorHandler
     )
@@ -108,92 +108,77 @@ trait RuntimeServer {
 
   def expiringCache: ExpiringCache[String, Combinators[_, _, _]]
 
-  def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit]
+  def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, Message) => ZIO[Any, Throwable, Unit]): UIO[Unit]
 
-  def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit]
+  def answer(nodeAddress: NodeAddress, message: Message): Task[Unit]
 
-  def send(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
+  def ask(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
 
 }
 
-case class SwimMessage(invocationId: UUID, response: Boolean, key: String, entityType: String, payload: Chunk[Byte], createdAt: Instant) {
+case class Message(key: String, entityType: String, correlationId: UUID, payload: Chunk[Byte], createdAt: Instant) {
   def entityTypeAndId: String = s"${entityType}_$key"
 }
 
 //TODO: use different method to communicate, like grpc instead of memberlist udp protocol, put a timer in the message put in the queue and expire it accordingly with the timeout
 object SwimRuntimeServer {
-  implicit val instantReader: default.ReadWriter[Instant] =
-    upickle.default.readwriter[Long].bimap[Instant](a => a.toEpochMilli, milli => Instant.ofEpochMilli(milli))
 
-  implicit val swimMessage: ByteCodec[SwimMessage] =
-    ByteCodec.fromReadWriter[SwimMessage](macroRW[SwimMessage])
-
-  def live(connectionTimeout: Duration, expireAfter: Duration, checkEvery: Duration): ZLayer[SwimEnv, Throwable, Has[RuntimeServer]] =
+  def live(
+    connectionTimeout: Duration,
+    expireAfter: Duration,
+    checkEvery: Duration
+  ): ZLayer[SwimEnv with Has[NodeMessagingProtocol], Throwable, Has[RuntimeServer]] =
     (for {
-      swim                       <- ZManaged.service[Memberlist.Service[SwimMessage]]
-      clock                      <- ZManaged.service[Clock.Service]
-      newExpiringCache           <- ZManaged.fromEffect(ExpiringCache.build[String, Combinators[_, _, _]](expireAfter, checkEvery))
-      hub                        <- ZHub.bounded[(NodeAddress, SwimMessage)](128).toManaged_
-      _                          <- memberlist.receive[SwimMessage].run(Sink.fromHub(hub)).toManaged_
-      listeners                  <- Ref.make[Map[String, (NodeAddress, SwimMessage) => Task[Unit]]](Map.empty).toManaged_
-      receiveMessageSubscription <- hub.subscribe
-      _ <- ZStream
-        .fromQueue(receiveMessageSubscription)
-        .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, swimMessage) =>
+      swim                  <- ZManaged.service[Memberlist.Service[Byte]]
+      clock                 <- ZManaged.service[Clock.Service]
+      nodeMessagingProtocol <- ZManaged.service[NodeMessagingProtocol]
+      newExpiringCache      <- ZManaged.fromEffect(ExpiringCache.build[String, Combinators[_, _, _]](expireAfter, checkEvery))
+      listeners             <- Ref.make[Map[String, (NodeAddress, Message) => Task[Unit]]](Map.empty).toManaged_
+      _ <- nodeMessagingProtocol.receive
+        .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, message) =>
           zio.clock.instant.flatMap { now =>
-            if (swimMessage.createdAt.toEpochMilli + connectionTimeout.toMillis < now.toEpochMilli) UIO.unit
+            if (message.createdAt.toEpochMilli + connectionTimeout.toMillis < now.toEpochMilli) UIO.unit
             else
               for {
                 listener <- listeners.get
-                currentListener = listener.get(swimMessage.entityType)
-                _ <- currentListener.get.apply(nodeAddress, swimMessage)
+                currentListener = listener.get(message.entityType)
+                _ <- currentListener.get.apply(nodeAddress, message)
               } yield ()
           }
         }
         .runDrain
         .toManaged_
         .fork
+
     } yield new RuntimeServer {
 
       val readSideProcessing: ReadSideProcessing = new SwimReadSideProcessing(swim, clock)
       // subscribe to hub that receive message, has a cache of combinators by entity and key and has an eviction strategy
 
-      override def send(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]] = {
+      // needs an answer
+      override def ask(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]] = {
         (for {
-          dequeue     <- hub.subscribe
-          activeNodes <- memberlist.nodes[SwimMessage].toManaged_
-          now         <- ZManaged.fromEffect(zio.clock.instant)
+          activeNodes <- memberlist.nodes[Byte]
+          now         <- zio.clock.instant
           nodeToUse = ShardLogic.getShardNode(key, activeNodes.toList)
-          uuid = UUID.randomUUID()
-          _ <- memberlist
-            .send[SwimMessage](
-              SwimMessage(invocationId = uuid, response = false, key = key, entityType = entityType, payload = payload, now),
-              nodeToUse
+          uuid <- Task.effectTotal(UUID.randomUUID())
+          element <- nodeMessagingProtocol
+            .ask(
+              nodeToUse,
+              Message(key = key, entityType = entityType, uuid, payload = payload, now)
             )
-            .toManaged_
-          // TODO not sure if accumulates from subscribe or from stream
-          element <- ZStream
-            .fromQueue(dequeue.filterOutput { case (address, message) => message.invocationId.toString == uuid.toString && message.response })
-            .runHead
-            .timeout(connectionTimeout)
-            .map(_.flatten)
-            .toManaged_
-        } yield {
-          element match {
-            case Some((from, payload)) => payload.payload
-            case None                  => Chunk.empty
-          }
-        }).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
-      }.useNow
+            .map(_.payload)
+        } yield element).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
+      }
 
-      override def sendAndForget(nodeAddress: NodeAddress, swimMessage: SwimMessage): Task[Unit] =
-        memberlist.send(swimMessage, nodeAddress).provideLayer(ZLayer.succeed(swim))
+      override def answer(nodeAddress: NodeAddress, swimMessage: Message): Task[Unit] =
+        nodeMessagingProtocol.answer(nodeAddress, swimMessage)
 
-      override def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, SwimMessage) => ZIO[Any, Throwable, Unit]): UIO[Unit] =
+      override def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, Message) => ZIO[Any, Throwable, Unit]): UIO[Unit] =
         listeners.update { old =>
           old + (entityType -> messageReceivedForMe)
         }
 
       val expiringCache: ExpiringCache[String, Combinators[_, _, _]] = newExpiringCache
-    }).provideSomeLayer[SwimEnv](Memberlist.live).toLayer
+    }).provideSomeLayer[SwimEnv with Has[NodeMessagingProtocol]](Memberlist.live[Byte]).toLayer
 }

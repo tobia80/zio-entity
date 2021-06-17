@@ -6,12 +6,12 @@ import zio.entity.readside.{KillSwitch, ReadSideProcess, ReadSideProcessing}
 import zio.{memberlist, Ref, Task, ZIO, ZLayer}
 import zio.memberlist.{Memberlist, Swim}
 
-class SwimReadSideProcessing(swim: Memberlist.Service[SwimMessage], clock: Clock.Service) extends ReadSideProcessing {
+class SwimReadSideProcessing(swim: Memberlist.Service[Byte], clock: Clock.Service) extends ReadSideProcessing {
   override def start(name: String, processes: List[ReadSideProcess]): Task[KillSwitch] = {
-    def checkNodesAndRun: ZIO[Swim[SwimMessage], Throwable, Task[Unit]] = for {
-      nodes <- memberlist.nodes[SwimMessage]
+    def checkNodesAndRun: ZIO[Swim[Byte], Throwable, Task[Unit]] = for {
+      nodes <- memberlist.nodes[Byte]
       shardNode = ShardLogic.getShardNode(name, nodes.toList)
-      localNode        <- memberlist.localMember[SwimMessage] if localNode == shardNode
+      localNode        <- memberlist.localMember[Byte] if localNode == shardNode
       runningProcesses <- ZIO.collectAll(processes.map(_.run))
       kill = ZIO.foreach(runningProcesses)(_.shutdown).unit
     } yield kill
@@ -21,7 +21,7 @@ class SwimReadSideProcessing(swim: Memberlist.Service[SwimMessage], clock: Clock
       kill  <- checkNodesAndRun
       _     <- state.set(kill)
       _ <- memberlist
-        .events[SwimMessage]
+        .events[Byte]
         .debounce(300.millis)
         .foreach { _ =>
           for {

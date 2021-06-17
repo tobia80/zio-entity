@@ -52,8 +52,9 @@ val k8dnsDeps = Seq(
 
 lazy val commonProtobufSettings = Seq(
   Compile / PB.targets := Seq(
-    scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
-  ),
+    scalapb.gen() -> (Compile / sourceManaged).value / "scalapb",
+    scalapb.zio_grpc.ZioCodeGenerator -> (Compile / sourceManaged).value / "scalapb"
+),
   Compile / PB.protoSources := Seq(
     baseDirectory.value / "src/schemas/protobuf"
   )
