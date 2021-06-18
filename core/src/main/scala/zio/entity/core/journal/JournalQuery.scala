@@ -7,7 +7,7 @@ import zio.entity.data.{Committable, ConsumerId, EventTag, TagConsumer}
 
 // implementations should commit into offset store
 trait JournalQuery[O, K, E] {
-  def eventsByTag(tag: EventTag, offset: Option[O]): ZStream[Any, Throwable, JournalEntry[O, K, E]]
+  def eventsByTag(tag: EventTag, offset: Option[O]): Stream[Throwable, JournalEntry[O, K, E]]
 
   def currentEventsByTag(tag: EventTag, offset: Option[O]): Stream[Throwable, JournalEntry[O, K, E]]
 

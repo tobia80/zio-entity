@@ -35,7 +35,7 @@ object RuntimeSpec extends DefaultRunnableSpec {
   private val swimEnv: ZLayer[ZEnv, Throwable, SwimEnv] =
     Clock.any and Logging.console() and discovery and SwimConfig.fromEnv.mapError(_ => new Throwable("Problem with config"))
   private val runtimeServer: ZLayer[SwimEnv, Throwable, Has[RuntimeServer]] =
-    ??? //SwimRuntimeServer.live(5.seconds, 5.seconds, 3.seconds)
+    SwimRuntimeServer.live(5.seconds, 5.seconds, 3.seconds)
 
   private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, Counter, Int, CountEvent, String]]] =
     Clock.any and stores and (swimEnv to runtimeServer) to Runtime
@@ -73,8 +73,8 @@ object RuntimeSpec extends DefaultRunnableSpec {
         _      <- counter("key").decrease(1)
         result <- promise.await
       } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](Clock.live and layer)
-    }
-  ) @@ sequential @@ zio.test.TestAspect.ignore
+    } @@ zio.test.TestAspect.ignore
+  ) @@ sequential
 }
 
 sealed trait CountEvent

@@ -20,7 +20,6 @@ import java.util.UUID
 
 object Runtime {
 
-  //TODO switch to TCP, UDP is not suitable for reliable message passing
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
     typeName: String,
     tagging: Tagging[Key],
@@ -123,11 +122,18 @@ case class Message(key: String, entityType: String, correlationId: UUID, payload
 //TODO: use different method to communicate, like grpc instead of memberlist udp protocol, put a timer in the message put in the queue and expire it accordingly with the timeout
 object SwimRuntimeServer {
 
+  implicit class RichNodeAddress(nodeAddress: NodeAddress) {
+    def toIpString: String = {
+      nodeAddress.ip.map { el => if (el < 0) 256 + el else el }.mkString(".")
+    }
+
+  }
+
   def live(
     connectionTimeout: Duration,
     expireAfter: Duration,
     checkEvery: Duration
-  ): ZLayer[SwimEnv with Has[NodeMessagingProtocol], Throwable, Has[RuntimeServer]] =
+  ): ZLayer[SwimEnv, Throwable, Has[RuntimeServer]] =
     (for {
       swim                  <- ZManaged.service[Memberlist.Service[Byte]]
       clock                 <- ZManaged.service[Clock.Service]
@@ -159,8 +165,10 @@ object SwimRuntimeServer {
       override def ask(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]] = {
         (for {
           activeNodes <- memberlist.nodes[Byte]
+          nodesToUse  <- if (activeNodes.isEmpty) memberlist.localMember[Byte].map(Set(_)) else UIO.succeed(activeNodes)
+          _           <- nodeMessagingProtocol.updateConnections(nodesToUse)
           now         <- zio.clock.instant
-          nodeToUse = ShardLogic.getShardNode(key, activeNodes.toList)
+          nodeToUse = ShardLogic.getShardNode(key, nodesToUse.toList)
           uuid <- Task.effectTotal(UUID.randomUUID())
           element <- nodeMessagingProtocol
             .ask(
@@ -180,5 +188,5 @@ object SwimRuntimeServer {
         }
 
       val expiringCache: ExpiringCache[String, Combinators[_, _, _]] = newExpiringCache
-    }).provideSomeLayer[SwimEnv with Has[NodeMessagingProtocol]](Memberlist.live[Byte]).toLayer
+    }).provideSomeLayer[SwimEnv](Memberlist.live[Byte] ++ GrpcNodeMessagingProtocol.live).toLayer
 }

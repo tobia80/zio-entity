@@ -47,7 +47,7 @@ val akkaDeps = Seq(
 val k8dnsDeps = Seq(
   "dev.zio" %% "zio-memberlist" % "0.0.0+6-97eb0ea1+20210601-0929-SNAPSHOT",
   "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion,
-  "io.grpc" % "grpc-netty" % "1.34.0"
+  "io.grpc" % "grpc-netty" % "1.38.1"
 ) ++ testDeps
 
 lazy val commonProtobufSettings = Seq(
