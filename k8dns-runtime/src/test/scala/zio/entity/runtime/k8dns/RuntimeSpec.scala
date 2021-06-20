@@ -62,7 +62,7 @@ object RuntimeSpec extends DefaultRunnableSpec {
         assert(secondEntityFinalRes)(equalTo(6)) &&
         assert(fromState)(equalTo(1))
       }).provideSomeLayer[TestEnvironment](layer)
-    } @@ zio.test.TestAspect.ignore,
+    },
     testM("Read side processing processes work") {
       (for {
         counter <- entity[String, Counter, Int, CountEvent, String]
@@ -82,7 +82,7 @@ object RuntimeSpec extends DefaultRunnableSpec {
         _      <- counter("key").decrease(1)
         result <- promise.await
       } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](layer)
-    } @@ zio.test.TestAspect.ignore
+    }
   ) @@ sequential
 }
 
