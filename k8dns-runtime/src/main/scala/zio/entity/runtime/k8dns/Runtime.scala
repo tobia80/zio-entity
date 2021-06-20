@@ -1,8 +1,6 @@
 package zio.entity.runtime.k8dns
 
 import izumi.reflect.Tag
-import upickle.default
-import upickle.default.macroRW
 import zio.clock.Clock
 import zio.duration.{durationInt, Duration}
 import zio.entity.core._

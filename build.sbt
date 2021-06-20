@@ -45,7 +45,13 @@ val akkaDeps = Seq(
 ) ++ testDeps
 
 val k8dnsDeps = Seq(
-  "dev.zio" %% "zio-memberlist" % "0.0.0+6-97eb0ea1+20210601-0929-SNAPSHOT",
+//  "dev.zio" %% "zio-memberlist" % "0.0.0+6-97eb0ea1+20210601-0929-SNAPSHOT",
+  "dev.zio"                %% "zio-nio"                 % "1.0.0-RC11",
+  "dev.zio"                %% "zio-config"              % "1.0.6",
+  "com.lihaoyi"            %% "upickle"                 % "1.3.15",
+  // used by memberlist
+  "dev.zio"                %% "zio-logging"             % "0.5.10",
+  "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
   "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion,
   "io.grpc" % "grpc-netty" % "1.38.1"
 ) ++ testDeps
