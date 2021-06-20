@@ -1,6 +1,6 @@
 package zio.entity.macros
 
-import zio.entity.annotations.MethodId
+import zio.entity.annotations.Id
 
 import scala.reflect.macros.blackbox
 
@@ -49,7 +49,7 @@ class DeriveMacros(val c: blackbox.Context) {
       yield {
         val method = member.asMethod
         val methodIdValue = member.annotations.collectFirst {
-          case a if a.tree.tpe.dealias <:< typeOf[MethodId].dealias =>
+          case a if a.tree.tpe.dealias <:< typeOf[Id].dealias =>
             val Literal(Constant(value: Int)) = a.tree.children.tail.head
             value
         }

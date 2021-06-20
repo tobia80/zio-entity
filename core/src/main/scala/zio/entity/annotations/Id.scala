@@ -4,4 +4,4 @@ package zio.entity.annotations
   * If not defined, the name of the method will be used. Renaming method will break the api during a deployment
   * @param id unique id
   */
-class MethodId(id: Int) extends scala.annotation.StaticAnnotation
+class Id(id: Int) extends scala.annotation.StaticAnnotation

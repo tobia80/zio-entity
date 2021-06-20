@@ -62,7 +62,7 @@ tested like normal code.
 
 The library will distribute the request in the cluster and serialize commands using either Scodec or Protobuf.
 
-The optional annotation `@MethodId` can be used to maintain schema compatibility if method is renamed. The id used will
+The optional annotation `@Id` can be used to maintain schema compatibility if method is renamed. The id used will
 be the unique number set in the annotation.
 
 ### ZIO Stream CQRS
@@ -123,13 +123,13 @@ case class CountIncremented(number: Int) extends CountEvent
 case class CountDecremented(number: Int) extends CountEvent
 
 trait Counter {
-  @MethodId(1)
+  @Id(1)
   def increase(number: Int): IO[String, Int]
 
-  @MethodId(2)
+  @Id(2)
   def decrease(number: Int): IO[String, Int]
 
-  @MethodId(4)
+  @Id(4)
   def getValue: IO[String, Int]
 }
 

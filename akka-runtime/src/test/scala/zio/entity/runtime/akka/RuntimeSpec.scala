@@ -2,7 +2,7 @@ package zio.entity.runtime.akka
 
 import zio.clock.Clock
 import zio.duration.durationInt
-import zio.entity.annotations.MethodId
+import zio.entity.annotations.Id
 import zio.entity.core.Entity.entity
 import zio.entity.core.Fold.impossible
 import zio.entity.core._
@@ -65,16 +65,16 @@ case class CountIncremented(number: Int) extends CountEvent
 case class CountDecremented(number: Int) extends CountEvent
 
 trait Counter {
-  @MethodId(1)
+  @Id(1)
   def increase(number: Int): IO[String, Int]
 
-  @MethodId(2)
+  @Id(2)
   def decrease(number: Int): IO[String, Int]
 
-  @MethodId(3)
+  @Id(3)
   def noop: IO[String, Unit]
 
-  @MethodId(4)
+  @Id(4)
   def getValue: IO[String, Int]
 }
 
