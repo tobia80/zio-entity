@@ -1,0 +1,4 @@
+/akka-runtime/target/
+/postgres/target/
+/core/target/
+/k8dns-runtime/target/

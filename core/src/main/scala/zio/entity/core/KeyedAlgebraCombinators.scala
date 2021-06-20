@@ -5,7 +5,7 @@ import zio.entity.core.Combinators.ImpossibleTransitionException
 import zio.entity.data.Versioned
 import zio.{Chunk, IO, NonEmptyChunk, Ref, Task, UIO, ZIO}
 
-class KeyedAlgebraCombinators[Key: Tag, State: Tag, Event: Tag, Reject](
+case class KeyedAlgebraCombinators[Key: Tag, State: Tag, Event: Tag, Reject](
   key: Key,
   state: Ref[Option[State]],
   userBehaviour: Fold[State, Event],
