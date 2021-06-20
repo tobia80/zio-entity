@@ -6,6 +6,7 @@ import akka.pattern.{ask, BackoffOpts, BackoffSupervisor}
 import akka.util.Timeout
 import zio.entity.readside.{KillSwitch, ReadSideProcess, ReadSideProcessing}
 import zio.entity.runtime.akka.readside.ReadSideWorkerActor.KeepRunningWithWorker
+import zio.stream.ZStream
 import zio.{Task, ZIO}
 
 import java.net.URLEncoder
@@ -24,8 +25,8 @@ final class ActorReadSideProcessing private (system: ActorSystem, settings: Read
     * @param name      - type name of underlying cluster sharding
     * @param processes - list of processes to distribute
     */
-  def start(name: String, processes: List[ReadSideProcess]): Task[KillSwitch] = {
-    ZIO.runtime[Any].flatMap { runtime =>
+  def start(name: String, processes: List[ReadSideProcess]): ZStream[Any, Throwable, KillSwitch] = {
+    ZStream.fromEffect(ZIO.runtime[Any].flatMap { runtime =>
       ZIO.effect {
         val opts = BackoffOpts
           .onFailure(
@@ -60,6 +61,6 @@ final class ActorReadSideProcessing private (system: ActorSystem, settings: Read
           Task.fromFuture(ec => regionSupervisor ? ReadSideSupervisor.GracefulShutdown).unit
         }
       }
-    }
+    })
   }
 }

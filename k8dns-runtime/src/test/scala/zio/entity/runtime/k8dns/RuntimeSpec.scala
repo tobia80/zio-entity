@@ -62,17 +62,26 @@ object RuntimeSpec extends DefaultRunnableSpec {
         assert(secondEntityFinalRes)(equalTo(6)) &&
         assert(fromState)(equalTo(1))
       }).provideSomeLayer[TestEnvironment](layer)
-    },
+    } @@ zio.test.TestAspect.ignore,
     testM("Read side processing processes work") {
       (for {
         counter <- entity[String, Counter, Int, CountEvent, String]
         promise <- zio.Promise.make[Nothing, Int]
         killSwitch <- counter
-          .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(promise, _, _)), _.getMessage)
+          .readSideSubscription(
+            readSideParams = ReadSideParams(
+              name = "read",
+              consumerId = ConsumerId("1"),
+              tagging = CounterEntity.tagging,
+              parallelism = 2,
+              logic = ReadSide.countIncreaseEvents(promise, _, _)
+            ),
+            errorHandler = _.getMessage
+          )
         _      <- counter("key").increase(2)
         _      <- counter("key").decrease(1)
         result <- promise.await
-      } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](Clock.live and layer)
+      } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](layer)
     } @@ zio.test.TestAspect.ignore
   ) @@ sequential
 }

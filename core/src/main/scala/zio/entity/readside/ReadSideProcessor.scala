@@ -31,7 +31,7 @@ object ReadSideProcessor {
     }
     for {
       (streams, processes) <- ZStream.fromEffect(buildStreamAndProcesses(sources))
-      ks                   <- ZStream.fromEffect(readSideProcessing.start(readSideParams.name, processes.toList).mapError(errorHandler))
+      ks                   <- readSideProcessing.start(readSideParams.name, processes.toList).mapError(errorHandler)
       _ <- streams
         .map { stream =>
           stream
@@ -69,17 +69,17 @@ object ReadSideProcessor {
 }
 
 trait ReadSideProcessing {
-  def start(name: String, processes: List[ReadSideProcess]): Task[KillSwitch]
+  def start(name: String, processes: List[ReadSideProcess]): ZStream[Any, Throwable, KillSwitch]
 }
 
 object ReadSideProcessing {
-  def start(name: String, processes: List[ReadSideProcess]): ZIO[Has[ReadSideProcessing], Throwable, KillSwitch] =
-    ZIO.accessM[Has[ReadSideProcessing]](_.get.start(name, processes))
+  def start(name: String, processes: List[ReadSideProcess]): ZStream[Has[ReadSideProcessing], Throwable, KillSwitch] =
+    ZStream.accessStream[Has[ReadSideProcessing]](_.get.start(name, processes))
 
   val memoryInner: ReadSideProcessing = (name: String, processes: List[ReadSideProcess]) => {
-    for {
+    ZStream.fromEffect(for {
       tasksToShutdown <- ZIO.foreach(processes)(process => process.run)
-    } yield KillSwitch(ZIO.foreach(tasksToShutdown)(_.shutdown).unit)
+    } yield KillSwitch(ZIO.foreach(tasksToShutdown)(_.shutdown).unit))
   }
   val memory: ULayer[Has[ReadSideProcessing]] = ZLayer.succeed { memoryInner }
 }

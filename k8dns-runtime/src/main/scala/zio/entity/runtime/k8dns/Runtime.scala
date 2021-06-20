@@ -7,7 +7,7 @@ import zio.clock.Clock
 import zio.duration.{durationInt, Duration}
 import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
-import zio.entity.data.{EntityProtocol, Tagging}
+import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.entity.readside._
 import zio.memberlist.Memberlist.SwimEnv
 import zio.memberlist.encoding.ByteCodec
@@ -93,7 +93,7 @@ object Runtime {
       { (key, payload) =>
         val keyString = implicitly[StringEncoder[Key]].encode(key)
 
-        runtimeServer.ask(keyString, typeName, payload)
+        runtimeServer.ask(keyString, typeName, payload).map(CommandResult)
       },
       eventSourcedBehaviour.errorHandler
     )
