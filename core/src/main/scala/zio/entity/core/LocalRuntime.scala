@@ -9,6 +9,7 @@ import zio.{Has, IO, Ref, Tag, UIO, ZIO, ZLayer}
 object LocalRuntime {
 
   // build a key => algebra transformed with key
+  // TODO: we need a queue by key to be a proper runtime because it cannot execute two elements in parallel before it finishes
   def buildLocalEntity[Algebra, Key: Tag, Event: Tag, State: Tag, Reject: Tag](
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject],
     algebraCombinatorConfig: AlgebraCombinatorConfig[Key, State, Event], //default combinator that tracks events and states

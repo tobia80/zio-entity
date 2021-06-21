@@ -2,16 +2,15 @@ package zio.entity.runtime.k8dns
 
 import izumi.reflect.Tag
 import zio.clock.Clock
-import zio.duration.{durationInt, Duration}
+import zio.duration.Duration
 import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.entity.readside._
 import zio.memberlist.Memberlist.SwimEnv
-import zio.memberlist.encoding.ByteCodec
-import zio.memberlist.{Memberlist, NodeAddress, Swim}
-import zio.stream.{Sink, ZStream}
-import zio.{memberlist, Chunk, Has, Ref, Task, UIO, ZHub, ZIO, ZLayer, ZManaged}
+import zio.memberlist.{Memberlist, NodeAddress}
+import zio.stream.ZStream
+import zio.{memberlist, Chunk, Has, Promise, Ref, Task, UIO, ZIO, ZLayer, ZManaged}
 
 import java.time.Instant
 import java.util.UUID
@@ -59,7 +58,7 @@ object Runtime {
         stores.journalStore,
         stores.snapshotting
       )
-      onMessageReceive = { (nodeAddress: NodeAddress, swimMessage: Message) =>
+      onMessageReceive = { (nodeAddress: NodeAddress, swimMessage: Message, promise: Promise[Throwable, Message]) =>
         val key = implicitly[StringDecoder[Key]].decode(swimMessage.key)
         val algebraCombinators: ZIO[Any, Throwable, Combinators[State, Event, Reject]] = for {
           keyToUse <- ZIO.fromOption(key).mapError(_ => new Exception("Cannot decode key"))
@@ -79,10 +78,12 @@ object Runtime {
         // if empty create combinator and set in the cache
         for {
           combinators <- algebraCombinators
+          // TODO: if nodeAddress is localAddress, then we can avoid serialization and message passing (we can avoid the protocol)
           result <- protocol.server
             .apply(eventSourcedBehaviour.algebra(combinators), eventSourcedBehaviour.errorHandler)
             .call(swimMessage.payload)
-          _ <- runtimeServer.answer(nodeAddress, swimMessage.copy(payload = result))
+          _ <- promise.succeed(swimMessage.copy(payload = result))
+//          _ <- runtimeServer.answer(nodeAddress, swimMessage.copy(payload = result))
         } yield ()
       }
       _ <- runtimeServer.registerListener(typeName, onMessageReceive)
@@ -90,7 +91,7 @@ object Runtime {
     } yield KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](readSubscription(clock, runtimeServer, stores.committableJournalStore))(
       { (key, payload) =>
         val keyString = implicitly[StringEncoder[Key]].encode(key)
-
+        // if sending to local, we can return the algebra directly but we need to understand early the destination of the message asking it to the runtime
         runtimeServer.ask(keyString, typeName, payload).map(CommandResult)
       },
       eventSourcedBehaviour.errorHandler
@@ -105,9 +106,7 @@ trait RuntimeServer {
 
   def expiringCache: ExpiringCache[String, Combinators[_, _, _]]
 
-  def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, Message) => ZIO[Any, Throwable, Unit]): UIO[Unit]
-
-  def answer(nodeAddress: NodeAddress, message: Message): Task[Unit]
+  def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, Message, Promise[Throwable, Message]) => ZIO[Any, Throwable, Unit]): UIO[Unit]
 
   def ask(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
 
@@ -137,16 +136,16 @@ object SwimRuntimeServer {
       clock                 <- ZManaged.service[Clock.Service]
       nodeMessagingProtocol <- ZManaged.service[NodeMessagingProtocol]
       newExpiringCache      <- ZManaged.fromEffect(ExpiringCache.build[String, Combinators[_, _, _]](expireAfter, checkEvery))
-      listeners             <- Ref.make[Map[String, (NodeAddress, Message) => Task[Unit]]](Map.empty).toManaged_
+      listeners             <- Ref.make[Map[String, (NodeAddress, Message, Promise[Throwable, Message]) => Task[Unit]]](Map.empty).toManaged_
       _ <- nodeMessagingProtocol.receive
-        .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, message) =>
+        .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, message, promise) =>
           zio.clock.instant.flatMap { now =>
             if (message.createdAt.toEpochMilli + connectionTimeout.toMillis < now.toEpochMilli) UIO.unit
             else
               for {
                 listener <- listeners.get
                 currentListener = listener.get(message.entityType)
-                _ <- currentListener.get.apply(nodeAddress, message)
+                _ <- currentListener.get.apply(nodeAddress, message, promise)
               } yield ()
           }
         }
@@ -177,10 +176,13 @@ object SwimRuntimeServer {
         } yield element).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
       }
 
-      override def answer(nodeAddress: NodeAddress, swimMessage: Message): Task[Unit] =
-        nodeMessagingProtocol.answer(nodeAddress, swimMessage)
+//      override def answer(nodeAddress: NodeAddress, swimMessage: Message): Task[Unit] =
+//        nodeMessagingProtocol.answer(nodeAddress, swimMessage)
 
-      override def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, Message) => ZIO[Any, Throwable, Unit]): UIO[Unit] =
+      override def registerListener(
+        entityType: String,
+        messageReceivedForMe: (NodeAddress, Message, Promise[Throwable, Message]) => ZIO[Any, Throwable, Unit]
+      ): UIO[Unit] =
         listeners.update { old =>
           old + (entityType -> messageReceivedForMe)
         }

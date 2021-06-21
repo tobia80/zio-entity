@@ -44,3 +44,5 @@ object MemoryStores {
     )).toLayer
 
 }
+
+object NoOpStores {}

@@ -5,8 +5,9 @@ import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.entity.readside.{KillSwitch, ReadSideParams, ReadSideProcessing, ReadSideProcessor}
 import zio.stream.ZStream
-import zio.{Chunk, Has, Ref, Tag, UIO, ZIO}
+import zio.{Chunk, Has, Queue, Ref, Tag, Task, UIO, ZIO}
 
+// TODO we need a queue by key in order to be a perfect model
 object LocalRuntimeWithProtocol {
 
   def entityLive[Key: StringDecoder: StringEncoder: Tag, Algebra, State: Tag, Event: Tag, Reject: Tag](
@@ -36,14 +37,17 @@ object LocalRuntimeWithProtocol {
     combinatorMap: Ref[Map[Key, UIO[Combinators[State, Event, Reject]]]],
     clock: Clock.Service,
     journalQuery: CommittableJournalQuery[Long, Key, Event]
-  )(implicit protocol: EntityProtocol[Algebra, Reject]): UIO[Entity[Key, Algebra, State, Event, Reject]] = {
+  )(implicit protocol: EntityProtocol[Algebra, Reject]): Task[Entity[Key, Algebra, State, Event, Reject]] = {
     val errorHandler: Throwable => Reject = eventSourcedBehaviour.errorHandler
     val subscription: (ReadSideParams[Key, Event, Reject], Throwable => Reject) => ZStream[Any, Reject, KillSwitch] =
       (readSideParams, errorHandler) =>
         ReadSideProcessor.readSideStream[Key, Event, Long, Reject](readSideParams, errorHandler, clock, ReadSideProcessing.memoryInner, journalQuery)
-    UIO.succeed(
-      KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](subscription)(
-        { (key: Key, bytes: Chunk[Byte]) =>
+    for {
+      queue <- Queue.unbounded[(Key, Chunk[Byte], zio.Promise[Throwable, CommandResult])]
+      _ <- ZStream
+        .fromQueue(queue)
+        .mapMPartitioned({ case (key, _, _) => key }, 32) { message =>
+          val (key, bytes, promise) = message
           val algebraCombinators: UIO[Combinators[State, Event, Reject]] = for {
             cache <- combinatorMap.get
             combinatorRetrieved <- cache.get(key) match {
@@ -64,10 +68,21 @@ object LocalRuntimeWithProtocol {
               .server(eventSourcedBehaviour.algebra(combinator), errorHandler)
               .call(bytes)
               .map(CommandResult)
+              .flatMap(promise.succeed)
           }
-        },
-        errorHandler
-      )
+        }
+        .runDrain
+        .fork
+    } yield KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](subscription)(
+      { (key: Key, bytes: Chunk[Byte]) =>
+        //receive from queue by key
+        for {
+          promise <- zio.Promise.make[Throwable, CommandResult]
+          _       <- queue.offer((key, bytes, promise))
+          res     <- promise.await
+        } yield res
+      },
+      errorHandler
     )
   }
 

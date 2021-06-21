@@ -3,7 +3,7 @@ package zio.entity.core
 import zio.entity.data.{CommandResult, EntityProtocol}
 import zio.entity.readside.{KillSwitch, ReadSideParams}
 import zio.stream.ZStream
-import zio.{Chunk, Has, Tag, Task, ZIO}
+import zio.{Chunk, Tag, Task}
 
 object KeyAlgebraSender {
   def keyToAlgebra[Key, Algebra, State, Event, Reject](
