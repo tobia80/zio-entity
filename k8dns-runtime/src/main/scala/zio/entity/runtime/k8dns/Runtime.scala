@@ -7,6 +7,7 @@ import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.entity.readside._
+import zio.entity.runtime.k8dns.protocol.{GrpcBiStreamsNodeMessagingProtocol, GrpcRequestsNodeMessagingProtocol, NodeMessagingProtocol}
 import zio.memberlist.Memberlist.SwimEnv
 import zio.memberlist.{Memberlist, NodeAddress}
 import zio.stream.ZStream
@@ -58,7 +59,7 @@ object Runtime {
         stores.journalStore,
         stores.snapshotting
       )
-      onMessageReceive = { (nodeAddress: NodeAddress, swimMessage: Message, promise: Promise[Throwable, Message]) =>
+      onMessageReceive = { (swimMessage: Message, sendFn: Message => Task[Unit]) =>
         val key = implicitly[StringDecoder[Key]].decode(swimMessage.key)
         val algebraCombinators: ZIO[Any, Throwable, Combinators[State, Event, Reject]] = for {
           keyToUse <- ZIO.fromOption(key).mapError(_ => new Exception("Cannot decode key"))
@@ -82,8 +83,7 @@ object Runtime {
           result <- protocol.server
             .apply(eventSourcedBehaviour.algebra(combinators), eventSourcedBehaviour.errorHandler)
             .call(swimMessage.payload)
-          _ <- promise.succeed(swimMessage.copy(payload = result))
-//          _ <- runtimeServer.answer(nodeAddress, swimMessage.copy(payload = result))
+          _ <- sendFn(swimMessage.copy(payload = result))
         } yield ()
       }
       _ <- runtimeServer.registerListener(typeName, onMessageReceive)
@@ -106,7 +106,7 @@ trait RuntimeServer {
 
   def expiringCache: ExpiringCache[String, Combinators[_, _, _]]
 
-  def registerListener(entityType: String, messageReceivedForMe: (NodeAddress, Message, Promise[Throwable, Message]) => ZIO[Any, Throwable, Unit]): UIO[Unit]
+  def registerListener(entityType: String, messageReceivedForMe: (Message, Message => Task[Unit]) => ZIO[Any, Throwable, Unit]): UIO[Unit]
 
   def ask(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
 
@@ -136,16 +136,16 @@ object SwimRuntimeServer {
       clock                 <- ZManaged.service[Clock.Service]
       nodeMessagingProtocol <- ZManaged.service[NodeMessagingProtocol]
       newExpiringCache      <- ZManaged.fromEffect(ExpiringCache.build[String, Combinators[_, _, _]](expireAfter, checkEvery))
-      listeners             <- Ref.make[Map[String, (NodeAddress, Message, Promise[Throwable, Message]) => Task[Unit]]](Map.empty).toManaged_
+      listeners             <- Ref.make[Map[String, (Message, Message => Task[Unit]) => Task[Unit]]](Map.empty).toManaged_
       _ <- nodeMessagingProtocol.receive
-        .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, message, promise) =>
+        .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, message, sendFn) =>
           zio.clock.instant.flatMap { now =>
             if (message.createdAt.toEpochMilli + connectionTimeout.toMillis < now.toEpochMilli) UIO.unit
             else
               for {
                 listener <- listeners.get
                 currentListener = listener.get(message.entityType)
-                _ <- currentListener.get.apply(nodeAddress, message, promise)
+                _ <- currentListener.get.apply(message, sendFn)
               } yield ()
           }
         }
@@ -170,7 +170,7 @@ object SwimRuntimeServer {
           element <- nodeMessagingProtocol
             .ask(
               nodeToUse,
-              Message(key = key, entityType = entityType, uuid, payload = payload, now)
+              Message(key = key, entityType = entityType, payload = payload, correlationId = uuid, createdAt = now)
             )
             .map(_.payload)
         } yield element).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
@@ -181,12 +181,12 @@ object SwimRuntimeServer {
 
       override def registerListener(
         entityType: String,
-        messageReceivedForMe: (NodeAddress, Message, Promise[Throwable, Message]) => ZIO[Any, Throwable, Unit]
+        messageReceivedForMe: (Message, Message => Task[Unit]) => ZIO[Any, Throwable, Unit]
       ): UIO[Unit] =
         listeners.update { old =>
           old + (entityType -> messageReceivedForMe)
         }
 
       val expiringCache: ExpiringCache[String, Combinators[_, _, _]] = newExpiringCache
-    }).provideSomeLayer[SwimEnv](Memberlist.live[Byte] ++ GrpcNodeMessagingProtocol.live).toLayer
+    }).provideSomeLayer[SwimEnv](Memberlist.live[Byte] ++ GrpcBiStreamsNodeMessagingProtocol.live).toLayer
 }
