@@ -1,48 +1,62 @@
-package zio.entity.runtime.k8dns
+package zio.entity.runtime.k8dns.protocol
 
 import com.google.protobuf.ByteString
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.{ManagedChannelBuilder, ServerBuilder, Status}
 import scalapb.zio_grpc.{ManagedServer, ZManagedChannel}
 import zio.ZManaged.Finalizer
+import zio.entity.runtime.k8dns.Message
 import zio.entity.runtime.k8dns.SwimRuntimeServer.RichNodeAddress
 import zio.entity.runtime.k8dns.protocol.ZioProtocol.ProtoStreamerClient.Service
 import zio.entity.runtime.k8dns.protocol.ZioProtocol.{ProtoStreamer, ProtoStreamerClient}
-import zio.entity.runtime.k8dns.protocol.{InternalMessage, ZioProtocol}
 import zio.logging.{Logger, Logging}
 import zio.memberlist.NodeAddress
 import zio.stream.ZStream
-import zio.{Chunk, Exit, Has, IO, Managed, Promise, RefM, Task, ZIO, ZLayer, ZManaged}
+import zio.{Chunk, Exit, Has, IO, Managed, Promise, RefM, Task, ZHub, ZIO, ZLayer, ZManaged}
 
 import java.time.Instant
 import java.util.UUID
 
-trait NodeMessagingProtocol {
-
-  def ask(nodeAddress: NodeAddress, payload: Message): Task[Message]
-
-  val receive: ZStream[Any, Throwable, (NodeAddress, Message, Promise[Throwable, Message])]
-
-  def updateConnections(nodes: Set[NodeAddress]): Task[Unit]
-}
-
 // TODO: instead of correlation id and invocation map, just offer in the queue a promise to resolve
-object GrpcNodeMessagingProtocol {
+object GrpcRequestsNodeMessagingProtocol {
   case class InvocationKey(id: UUID)
   // connect by node
   val live: ZLayer[Logging, Throwable, Has[NodeMessagingProtocol]] = (for {
-    logging <- ZManaged.service[Logger[String]]
-    clients <- ZManaged.fromEffect(RefM.make[Map[NodeAddress, (ProtoStreamerClient.ZService[Any, Any], ZManaged.Finalizer)]](Map.empty))
-//    invocations <- ZManaged.fromEffect(Ref.make[Map[InvocationKey, Promise[Throwable, (NodeAddress, Message)]]](Map.empty))
-    queue <- ZManaged.fromEffect(zio.Queue.unbounded[(NodeAddress, Message, Promise[Throwable, Message])])
+    logging         <- ZManaged.service[Logger[String]]
+    clients         <- ZManaged.fromEffect(RefM.make[Map[NodeAddress, (ProtoStreamerClient.ZService[Any, Any], ZManaged.Finalizer)]](Map.empty))
+    inbound         <- ZManaged.fromEffect(zio.Queue.unbounded[(NodeAddress, Message, Message => Task[Unit])])
+    inboundResponse <- ZManaged.fromEffect(ZHub.unbounded[(NodeAddress, Message)])
+    outbound        <- ZHub.bounded[(NodeAddress, Message)](50).toManaged_
+    _ <- ZStream
+      .fromHub(outbound)
+      .foreach { case (address, message) =>
+        for {
+          clientMap <- clients.get
+          addressAndResponse <- clientMap.get(address).fold[Task[(NodeAddress, Message)]](IO.fail(new Throwable("Cannot find client"))) { case (client, _) =>
+            // send to queue
+            val internalMessage = InternalMessageConverter.toInternalMessage(address, message)
+            client
+              .sendMessage(internalMessage)
+              .map { resp =>
+                InternalMessageConverter.toMessage(resp)
+              }
+              .mapError(error => new Throwable(error.toString))
+          }
+          _ <- inboundResponse.publish(addressAndResponse)
+        } yield ()
+      }
+      .fork
+      .toManaged_
+
     scope <- ZManaged.scope
     // every time connect is called, means a new connection from the client, add to map, merge the input streams, put output streams in the map, when a node address goes down, remove from the map
     runtimeStreamer: ProtoStreamer = new ZioProtocol.ProtoStreamer {
       override def sendMessage(request: InternalMessage): ZIO[Any, Status, InternalMessage] = {
         (for {
           promise <- Promise.make[Throwable, Message]
+          sendFn = (message: Message) => promise.succeed(message).unit
           (nodeAddress, message) = InternalMessageConverter.toMessage(request)
-          _   <- queue.offer((nodeAddress, message, promise))
+          _   <- inbound.offer((nodeAddress, message, sendFn))
           res <- promise.await
         } yield InternalMessageConverter.toInternalMessage(nodeAddress, res)).mapError(_ => Status.FAILED_PRECONDITION)
       }
@@ -60,24 +74,19 @@ object GrpcNodeMessagingProtocol {
     // TODO: start the server here
     // client call, find channel and use it
     override def ask(nodeAddress: NodeAddress, message: Message): Task[Message] = {
-      val internalMessage = InternalMessageConverter.toInternalMessage(nodeAddress, message)
-      for {
-        clientMap <- clients.get
-        response <- clientMap.get(nodeAddress).fold[Task[Message]](IO.fail(new Throwable("Cannot find client"))) { case (client, _) =>
-          client
-            .sendMessage(internalMessage)
-            .map { resp =>
-              val (_, response) = InternalMessageConverter.toMessage(resp)
-              response
-            }
-            .mapError(error => new Throwable(error.toString))
-        }
-      } yield response
+//      val internalMessage = InternalMessageConverter.toInternalMessage(nodeAddress, message)
+      (for {
+        queue    <- inboundResponse.subscribe
+        fiber    <- ZStream.fromQueue(queue.filterOutput(_._2.correlationId == message.correlationId)).take(1).runHead.fork.toManaged_
+        _        <- outbound.publish(nodeAddress, message).toManaged_
+        resMaybe <- fiber.join.toManaged_
+        res      <- IO.fromOption(resMaybe).mapError(_ => new Throwable("")).toManaged_
+      } yield res._2).useNow
     }
 
     // server receiving messages from connect
     // stream from all the connect requests
-    override val receive: ZStream[Any, Throwable, (NodeAddress, Message, Promise[Throwable, Message])] = ZStream.fromQueue(queue)
+    override val receive: ZStream[Any, Throwable, (NodeAddress, Message, Message => Task[Unit])] = ZStream.fromQueue(inbound)
 
     // check map and remove callback
     override def updateConnections(nodes: Set[NodeAddress]): Task[Unit] = {
