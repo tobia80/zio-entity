@@ -18,6 +18,7 @@ import java.time.Instant
 import java.util.UUID
 
 // TODO: instead of correlation id and invocation map, just offer in the queue a promise to resolve
+// ALPHA
 object GrpcBiStreamsNodeMessagingProtocol {
   case class InvocationKey(id: UUID)
   // connect by node
@@ -34,8 +35,13 @@ object GrpcBiStreamsNodeMessagingProtocol {
         val managed: ZIO[Any, Status, ZStream[Any, Nothing, StreamingInternalMessage]] = (for {
           firstMessageAndStream <- request.peel(ZSink.head)
           (firstMessage, stream) = firstMessageAndStream
-          message     <- IO.fromOption(firstMessage).toManaged_
-          _           <- stream.foreach { message => inbound.publish(message) }.toManaged_
+          message <- IO.fromOption(firstMessage).toManaged_
+          _ <- stream
+            .foreach { message =>
+              inbound.publish(message)
+            }
+            .fork
+            .toManaged_
           outboundMap <- outboundQueues.get.toManaged_
           from = StreamingInternalMessageConverter.toMessage(message)._1
           out <- IO.fromOption(outboundMap.get(from)).toManaged_
@@ -61,7 +67,14 @@ object GrpcBiStreamsNodeMessagingProtocol {
         // subscribe with hub to receive and filter by correlationId on response queue
         outboundQueuesMap <- outboundQueues.get.toManaged_
         queue             <- inbound.subscribe
-        responseFiber     <- ZStream.fromQueue(queue).filter(el => el.response && el.correlationId == message.correlationId.toString).runHead.fork.toManaged_
+        responseFiber <- ZStream
+          .fromQueue(queue)
+          .filter { el =>
+            el.response && el.correlationId == message.correlationId.toString
+          }
+          .runHead
+          .fork
+          .toManaged_
         _ <- outboundQueuesMap
           .get(nodeAddress)
           .fold[Task[Boolean]](Task.fail(new Throwable("Cannot find client"))) { case (outboundQueue, _) =>
@@ -122,6 +135,7 @@ object GrpcBiStreamsNodeMessagingProtocol {
                     inbound.publish(element)
                   }
                   .mapError(error => new Throwable(error.toString))
+                  .fork
               } yield (node -> (outboundQueue, finaliser))
             }
           }

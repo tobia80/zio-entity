@@ -176,9 +176,6 @@ object SwimRuntimeServer {
         } yield element).provideLayer(ZLayer.succeed(swim) and ZLayer.succeed(clock))
       }
 
-//      override def answer(nodeAddress: NodeAddress, swimMessage: Message): Task[Unit] =
-//        nodeMessagingProtocol.answer(nodeAddress, swimMessage)
-
       override def registerListener(
         entityType: String,
         messageReceivedForMe: (Message, Message => Task[Unit]) => ZIO[Any, Throwable, Unit]
@@ -188,5 +185,5 @@ object SwimRuntimeServer {
         }
 
       val expiringCache: ExpiringCache[String, Combinators[_, _, _]] = newExpiringCache
-    }).provideSomeLayer[SwimEnv](Memberlist.live[Byte] ++ GrpcBiStreamsNodeMessagingProtocol.live).toLayer
+    }).provideSomeLayer[SwimEnv](Memberlist.live[Byte] ++ GrpcRequestsNodeMessagingProtocol.live).toLayer
 }
