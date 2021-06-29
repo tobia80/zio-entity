@@ -74,13 +74,12 @@ object GrpcRequestsNodeMessagingProtocol {
     // TODO: start the server here
     // client call, find channel and use it
     override def ask(nodeAddress: NodeAddress, message: Message): Task[Message] = {
-//      val internalMessage = InternalMessageConverter.toInternalMessage(nodeAddress, message)
       (for {
         queue    <- inboundResponse.subscribe
         fiber    <- ZStream.fromQueue(queue.filterOutput(_._2.correlationId == message.correlationId)).take(1).runHead.fork.toManaged_
         _        <- outbound.publish(nodeAddress, message).toManaged_
         resMaybe <- fiber.join.toManaged_
-        res      <- IO.fromOption(resMaybe).mapError(_ => new Throwable("")).toManaged_
+        res      <- IO.fromOption(resMaybe).mapError(_ => new Throwable("No message returned")).toManaged_
       } yield res._2).useNow
     }
 
@@ -88,12 +87,8 @@ object GrpcRequestsNodeMessagingProtocol {
     // stream from all the connect requests
     override val receive: ZStream[Any, Throwable, (NodeAddress, Message, Message => Task[Unit])] = ZStream.fromQueue(inbound)
 
-    // check map and remove callback
     override def updateConnections(nodes: Set[NodeAddress]): Task[Unit] = {
-      //if cached client, they are created/ rebuilt, invocations can be removed from the map or we can have a persisted dead letter messages
-
       clients.update { oldMap =>
-        // remove elements not present anymore and add elements
         val elementsToRemove: Map[NodeAddress, (Service, ZManaged.Finalizer)] = oldMap.filterNot { el =>
           nodes(el._1)
         }
