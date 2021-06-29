@@ -7,11 +7,11 @@ import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.entity.readside._
-import zio.entity.runtime.k8dns.protocol.{GrpcBiStreamsNodeMessagingProtocol, GrpcRequestsNodeMessagingProtocol, NodeMessagingProtocol}
+import zio.entity.runtime.k8dns.protocol.{GrpcRequestsNodeMessagingProtocol, NodeMessagingProtocol}
 import zio.memberlist.Memberlist.SwimEnv
 import zio.memberlist.{Memberlist, NodeAddress}
 import zio.stream.ZStream
-import zio.{memberlist, Chunk, Has, Promise, Ref, Task, UIO, ZIO, ZLayer, ZManaged}
+import zio.{memberlist, Chunk, Has, Ref, Task, UIO, ZIO, ZLayer, ZManaged}
 
 import java.time.Instant
 import java.util.UUID
