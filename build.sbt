@@ -53,7 +53,7 @@ val k8dnsDeps = Seq(
   "dev.zio"                %% "zio-logging"             % "0.5.11",
   "org.scala-lang.modules" %% "scala-collection-compat" % "2.4.4",
   "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion,
-  "io.grpc" % "grpc-netty" % "1.38.1"
+  "io.grpc" % "grpc-netty" % "1.39.0"
 ) ++ testDeps
 
 lazy val commonProtobufSettings = Seq(
