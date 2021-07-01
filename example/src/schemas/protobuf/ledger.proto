@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package zio.entity.example;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "scalapb/scalapb.proto";
+
+option (scalapb.options) = {
+    flat_package: true
+    lenses: true
+    preserve_unknown_fields: false
+};
+
+message LedgerEvent {
+
+  oneof sealed_value {
+    LedgerCredited credited = 1;
+    LedgerDebited debited = 2;
+    LedgerLockAdded locked = 3;
+    LedgerLockReleased released = 4;
+  }
+}
+
+message LedgerCredited {
+    int32 reasonId = 1;
+    Amount amount = 2 [(scalapb.field).no_box = true];
+}
+
+message LedgerDebited {
+//    option (scalapb.message).no_box = true;
+    int32 reasonId = 1;
+    Amount amount = 2 [(scalapb.field).no_box = true];
+}
+
+message LedgerLockAdded {
+    int32  reasonId = 1;
+    Lock lock = 2 [(scalapb.field).no_box = true];
+}
+
+message LedgerLockReleased {
+    LockId lockId = 1 [(scalapb.field).no_box = true];
+}
+
+message Amount {
+    enum Currency {
+        USD = 0;
+        EUR = 1;
+        GBP = 2;
+    }
+
+    Currency currency = 1;
+    BDecimal value = 2;
+}
+
+message BDecimal {
+    option (scalapb.message).type = "scala.math.BigDecimal";
+    uint64 unscaledValue = 1;
+    int32 scale = 2;
+}
+
+message LockId {
+    int64  value = 1;
+}
+
+message Lock {
+    LockId lockId = 1;
+    Amount amount = 2;
+    google.protobuf.Timestamp createdAt = 3;
+    google.protobuf.Timestamp expiredOn = 4;
+}
+
+
+message ILedger {
+    option (scalapb.message).type = "zio.entity.example.ledger.Ledger";
+    repeated Lock locks = 1;
+    map<string, BDecimal> actual = 2;
+}
+
+message LedgerId {
+    PUUID value = 1;
+}
+
+message PUUID {
+    option (scalapb.message).type = "java.util.UUID";
+    string value = 1;
+}

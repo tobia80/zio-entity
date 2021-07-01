@@ -30,6 +30,10 @@ val allDeps = Seq(
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
 ) ++ testDeps
 
+val exampleDeps = Seq(
+  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
+) ++ testDeps
+
 val postgresDeps = Seq(
   "org.tpolecat" %% "doobie-core" % "0.13.4",
   "org.tpolecat" %% "doobie-hikari" % "0.13.4",
@@ -92,12 +96,17 @@ lazy val `k8dns-runtime` = module("zio-entity-k8dnsruntime", "k8dns-runtime", "k
 lazy val `benchmarks` = module("benchmarks", "benchmarks", "Benchmarks")
   .dependsOn(`core`, `k8dns-runtime`, `akka-runtime`, `postgres`)
 
+lazy val `example` = module("example", "example", "Example of credit card processing")
+  .dependsOn(`core`, `k8dns-runtime`, `akka-runtime`, `postgres`)
+  .settings(libraryDependencies ++= exampleDeps)
+  .settings(commonProtobufSettings)
+
 lazy val docs = project       // new documentation project
   .in(file("zio-entity-docs")) // important: it must not be docs/
   .dependsOn(`core`, `akka-runtime`, `postgres`)
   .enablePlugins(MdocPlugin)
 
-aggregateProjects(`core`, `akka-runtime`, `k8dns-runtime`, `postgres`, `benchmarks`)
+aggregateProjects(`core`, `akka-runtime`, `k8dns-runtime`, `postgres`, `benchmarks`, `example`)
 
 ThisBuild / parallelExecution := false
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")

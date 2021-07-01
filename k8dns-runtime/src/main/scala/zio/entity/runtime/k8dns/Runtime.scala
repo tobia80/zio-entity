@@ -80,6 +80,7 @@ object Runtime {
         for {
           combinators <- algebraCombinators
           // TODO: if nodeAddress is localAddress, then we can avoid serialization and message passing (we can avoid the protocol)
+          // TODO: send the error through the wire
           result <- protocol.server
             .apply(eventSourcedBehaviour.algebra(combinators), eventSourcedBehaviour.errorHandler)
             .call(swimMessage.payload)
