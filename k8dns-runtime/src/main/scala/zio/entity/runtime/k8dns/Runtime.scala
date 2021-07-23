@@ -7,6 +7,7 @@ import zio.entity.core._
 import zio.entity.core.journal.CommittableJournalQuery
 import zio.entity.data.{CommandResult, EntityProtocol, Tagging}
 import zio.entity.readside._
+import zio.entity.runtime.k8dns.SwimRuntimeServer.EntityName
 import zio.entity.runtime.k8dns.protocol.{GrpcRequestsNodeMessagingProtocol, NodeMessagingProtocol}
 import zio.memberlist.Memberlist.SwimEnv
 import zio.memberlist.{Memberlist, NodeAddress}
@@ -32,6 +33,37 @@ object Runtime {
     Reject
   ]] = {
 
+    def onMessageReceived(
+      combinatorsMap: ExpiringCache[String, Combinators[_, _, _]],
+      combinators: AlgebraCombinatorConfig[Key, State, Event]
+    ): (Message, Message => Task[Unit]) => ZIO[Any, Throwable, Unit] = { (swimMessage: Message, sendFn: Message => Task[Unit]) =>
+      val key = implicitly[StringDecoder[Key]].decode(swimMessage.key)
+      val algebraCombinators: ZIO[Any, Throwable, Combinators[State, Event, Reject]] = for {
+        keyToUse <- ZIO.fromOption(key).mapError(_ => new Exception("Cannot decode key"))
+        keyInStringForm = implicitly[StringEncoder[Key]].encode(keyToUse)
+        cache <- combinatorsMap.get(keyInStringForm)
+        combinatorRetrieved <- cache match {
+          case Some(combinator) =>
+            UIO.succeed(combinator.asInstanceOf[Combinators[State, Event, Reject]])
+          case None =>
+            KeyedAlgebraCombinators
+              .fromParams[Key, State, Event, Reject](keyToUse, eventSourcedBehaviour.eventHandler, eventSourcedBehaviour.errorHandler, combinators)
+              .flatMap { combinator =>
+                combinatorsMap.add(keyInStringForm -> combinator).as(combinator)
+              }
+        }
+      } yield combinatorRetrieved
+      // if empty create combinator and set in the cache
+      for {
+        combinators <- algebraCombinators
+        // TODO: if nodeAddress is localAddress, then we can avoid serialization and message passing (we can avoid the protocol)
+        result <- protocol.server
+          .apply(eventSourcedBehaviour.algebra(combinators), eventSourcedBehaviour.errorHandler)
+          .call(swimMessage.payload)
+        _ <- sendFn(swimMessage.copy(payload = result))
+      } yield ()
+    }
+
     def readSubscription(clock: Clock.Service, runtimeServer: RuntimeServer, committableJournalQuery: CommittableJournalQuery[Long, Key, Event]): (
       ReadSideParams[Key, Event, Reject],
       Throwable => Reject
@@ -53,40 +85,13 @@ object Runtime {
       stores        <- ZIO.service[Stores[Key, Event, State]]
       clock         <- ZIO.service[Clock.Service]
       combinatorsMap = runtimeServer.expiringCache
-      combinators = AlgebraCombinatorConfig[Key, State, Event](
+      combinators: AlgebraCombinatorConfig[Key, State, Event] = AlgebraCombinatorConfig[Key, State, Event](
         stores.offsetStore,
         tagging,
         stores.journalStore,
         stores.snapshotting
       )
-      onMessageReceive = { (swimMessage: Message, sendFn: Message => Task[Unit]) =>
-        val key = implicitly[StringDecoder[Key]].decode(swimMessage.key)
-        val algebraCombinators: ZIO[Any, Throwable, Combinators[State, Event, Reject]] = for {
-          keyToUse <- ZIO.fromOption(key).mapError(_ => new Exception("Cannot decode key"))
-          keyInStringForm = implicitly[StringEncoder[Key]].encode(keyToUse)
-          cache <- combinatorsMap.get(keyInStringForm)
-          combinatorRetrieved <- cache match {
-            case Some(combinator) =>
-              UIO.succeed(combinator.asInstanceOf[Combinators[State, Event, Reject]])
-            case None =>
-              KeyedAlgebraCombinators
-                .fromParams[Key, State, Event, Reject](keyToUse, eventSourcedBehaviour.eventHandler, eventSourcedBehaviour.errorHandler, combinators)
-                .flatMap { combinator =>
-                  combinatorsMap.add(keyInStringForm -> combinator).as(combinator)
-                }
-          }
-        } yield combinatorRetrieved
-        // if empty create combinator and set in the cache
-        for {
-          combinators <- algebraCombinators
-          // TODO: if nodeAddress is localAddress, then we can avoid serialization and message passing (we can avoid the protocol)
-          result <- protocol.server
-            .apply(eventSourcedBehaviour.algebra(combinators), eventSourcedBehaviour.errorHandler)
-            .call(swimMessage.payload)
-          _ <- sendFn(swimMessage.copy(payload = result))
-        } yield ()
-      }
-      _ <- runtimeServer.registerListener(typeName, onMessageReceive)
+      _ <- runtimeServer.registerListener(EntityName(typeName), onMessageReceived(combinatorsMap, combinators))
 
     } yield KeyAlgebraSender.keyToAlgebra[Key, Algebra, State, Event, Reject](readSubscription(clock, runtimeServer, stores.committableJournalStore))(
       { (key, payload) =>
@@ -106,7 +111,7 @@ trait RuntimeServer {
 
   def expiringCache: ExpiringCache[String, Combinators[_, _, _]]
 
-  def registerListener(entityType: String, messageReceivedForMe: (Message, Message => Task[Unit]) => ZIO[Any, Throwable, Unit]): UIO[Unit]
+  def registerListener(entityType: EntityName, messageReceivedForMe: (Message, Message => Task[Unit]) => ZIO[Any, Throwable, Unit]): UIO[Unit]
 
   def ask(key: String, entityType: String, payload: Chunk[Byte]): Task[Chunk[Byte]]
 
@@ -118,6 +123,8 @@ case class Message(key: String, entityType: String, correlationId: UUID, payload
 
 //TODO: use different method to communicate, like grpc instead of memberlist udp protocol, put a timer in the message put in the queue and expire it accordingly with the timeout
 object SwimRuntimeServer {
+
+  case class EntityName(value: String) extends AnyVal
 
   implicit class RichNodeAddress(nodeAddress: NodeAddress) {
     def toIpString: String = {
@@ -136,7 +143,7 @@ object SwimRuntimeServer {
       clock                 <- ZManaged.service[Clock.Service]
       nodeMessagingProtocol <- ZManaged.service[NodeMessagingProtocol]
       newExpiringCache      <- ZManaged.fromEffect(ExpiringCache.build[String, Combinators[_, _, _]](expireAfter, checkEvery))
-      listeners             <- Ref.make[Map[String, (Message, Message => Task[Unit]) => Task[Unit]]](Map.empty).toManaged_
+      listeners             <- Ref.make[Map[EntityName, (Message, Message => Task[Unit]) => Task[Unit]]](Map.empty).toManaged_
       _ <- nodeMessagingProtocol.receive
         .mapMPartitioned(el => el._2.entityType, 32) { case (nodeAddress, message, sendFn) =>
           zio.clock.instant.flatMap { now =>
@@ -144,7 +151,7 @@ object SwimRuntimeServer {
             else
               for {
                 listener <- listeners.get
-                currentListener = listener.get(message.entityType)
+                currentListener = listener.get(EntityName(message.entityType))
                 _ <- currentListener.get.apply(message, sendFn)
               } yield ()
           }
@@ -177,7 +184,7 @@ object SwimRuntimeServer {
       }
 
       override def registerListener(
-        entityType: String,
+        entityType: EntityName,
         messageReceivedForMe: (Message, Message => Task[Unit]) => ZIO[Any, Throwable, Unit]
       ): UIO[Unit] =
         listeners.update { old =>
