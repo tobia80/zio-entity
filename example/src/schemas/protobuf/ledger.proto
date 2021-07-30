@@ -19,26 +19,31 @@ message LedgerEvent {
     LedgerDebited debited = 2;
     LedgerLockAdded locked = 3;
     LedgerLockReleased released = 4;
+    LedgerLockSettled settled = 5;
   }
 }
 
 message LedgerCredited {
-    int32 reasonId = 1;
+    string reason = 1;
     Amount amount = 2 [(scalapb.field).no_box = true];
 }
 
 message LedgerDebited {
 //    option (scalapb.message).no_box = true;
-    int32 reasonId = 1;
+    string reason = 1;
     Amount amount = 2 [(scalapb.field).no_box = true];
 }
 
 message LedgerLockAdded {
-    int32  reasonId = 1;
+    string  reason = 1;
     Lock lock = 2 [(scalapb.field).no_box = true];
 }
 
 message LedgerLockReleased {
+    LockId lockId = 1 [(scalapb.field).no_box = true];
+}
+
+message LedgerLockSettled {
     LockId lockId = 1 [(scalapb.field).no_box = true];
 }
 
@@ -60,7 +65,7 @@ message BDecimal {
 }
 
 message LockId {
-    int64  value = 1;
+    PUUID value = 1;
 }
 
 message Lock {

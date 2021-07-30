@@ -31,7 +31,8 @@ val allDeps = Seq(
 ) ++ testDeps
 
 val exampleDeps = Seq(
-  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
+  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+  "com.vladkopanev" %% "zio-saga-core" % "0.4.0"
 ) ++ testDeps
 
 val postgresDeps = Seq(
@@ -81,7 +82,7 @@ lazy val `benchmarks` = module("benchmarks", "benchmarks", "Benchmarks")
   .dependsOn(`core`, `akka-runtime`, `postgres`)
 
 lazy val `example` = module("example", "example", "Example of credit card processing")
-  .dependsOn(`core`, `k8dns-runtime`, `akka-runtime`, `postgres`)
+  .dependsOn(`core`, `akka-runtime`, `postgres`)
   .settings(libraryDependencies ++= exampleDeps)
   .settings(commonProtobufSettings)
 
