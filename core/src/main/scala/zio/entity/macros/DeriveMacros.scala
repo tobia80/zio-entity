@@ -186,6 +186,8 @@ class DeriveMacros(val c: blackbox.Context) {
             import zio.schema.DeriveSchema
             import zio.schema.codec.ProtobufCodec
             import zio._
+            import zio.entity.macros.Schemas._
+            
 
              private val mainSchema = DeriveSchema.gen[(String, Chunk[Byte])]
              val client: (Chunk[Byte] => Task[Chunk[Byte]], Throwable => $reject) => $algebra =

@@ -32,7 +32,6 @@ val allDeps = Seq(
 
 val exampleDeps = Seq(
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
-  "com.vladkopanev" %% "zio-saga-core" % "0.4.0"
 ) ++ testDeps
 
 val postgresDeps = Seq(

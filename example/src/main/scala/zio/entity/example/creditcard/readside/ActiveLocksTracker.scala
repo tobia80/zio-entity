@@ -23,7 +23,7 @@ object ActiveLocksTracker {
       {
         event match {
           case lockAdded: LedgerLockAdded =>
-            val lockKey = LockKey(id, lockAdded.lock.getLockId)
+            val lockKey = LockKey(id, lockAdded.lock.lockId)
             storage.insert(lockKey, LockValue(lockAdded.lock.getExpiredOn.asJavaInstant), lockAdded.lock.getExpiredOn.asJavaInstant)
           case lockReleased: LedgerLockReleased =>
             val lockKey = LockKey(id, lockReleased.lockId)
@@ -44,7 +44,6 @@ object ActiveLocksTracker {
         ledgerEntity.readSideSubscription(readSideParams, _ => UnknownLedgerError).unit.mapError(_ => UnknownActiveLocksTrackerError$)
     }
   }
-
 }
 
 sealed trait ActiveLocksTrackerError

@@ -25,12 +25,12 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
     testM("receives commands, produces events and updates state") {
       (for {
-        counter              <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
+        (counter, probe)     <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
         res                  <- counter("key").increase(3)
         finalRes             <- counter("key").decrease(2)
         secondEntityRes      <- counter("secondKey").increase(1)
         secondEntityFinalRes <- counter("secondKey").increase(5)
-        events               <- counter.probeForKey("key").events
+        events               <- probe.probeForKey("key").events
         fromState            <- counter("key").getValue
       } yield {
         assert(events)(equalTo(List(CountIncremented(3), CountDecremented(2)))) &&
@@ -43,14 +43,14 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
     },
     testM("Read side processing processes work") {
       (for {
-        counter <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
-        state   <- Ref.make(0)
+        (counter, probe) <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
+        state            <- Ref.make(0)
         killSwitch <- counter
           .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(state, _, _)), _.getMessage)
         _            <- counter("key").increase(2)
         _            <- counter("key").increase(3)
         _            <- counter("key").decrease(1)
-        _            <- counter.triggerReadSideProcessing(1)
+        _            <- probe.triggerReadSideProcessing(1)
         valueOfState <- state.get
       } yield (assert(valueOfState)(equalTo(2)))).provideSomeLayer[TestEnvironment](layer)
     }

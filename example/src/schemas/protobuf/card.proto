@@ -16,10 +16,8 @@ option (scalapb.options) = {
 message CardEvent {
 
   oneof sealed_value {
-    AmountAuthorized authorized = 1;
-    AuthExpired authExpired = 2;
-    CardOpened cardOpened = 3;
-    CardClosed cardClosed = 4;
+    CardOpened cardOpened = 1;
+    CardClosed cardClosed = 2;
   }
 }
 
@@ -36,13 +34,12 @@ message AmountAuthorized {
 }
 
 message AuthExpired {
-    LedgerId ledgerId = 1;
-    LockId lockId = 2;
+    LockId lockId = 1;
 }
 
 
 
-message Card {
+message CardState {
     oneof sealed_value {
         Created created = 1;
         Opened opened = 2;

@@ -48,6 +48,8 @@ message LedgerLockSettled {
 }
 
 message Amount {
+    option (scalapb.message).companion_extends = "zio.entity.example.models.AmountCompanion";
+
     enum Currency {
         USD = 0;
         EUR = 1;
@@ -69,8 +71,8 @@ message LockId {
 }
 
 message Lock {
-    LockId lockId = 1;
-    Amount amount = 2;
+    LockId lockId = 1 [(scalapb.field).no_box = true];
+    Amount amount = 2 [(scalapb.field).no_box = true];
     google.protobuf.Timestamp createdAt = 3;
     google.protobuf.Timestamp expiredOn = 4;
 }

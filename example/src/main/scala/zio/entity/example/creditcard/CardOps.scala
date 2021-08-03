@@ -7,7 +7,7 @@ import zio.{Has, IO, ZIO, ZLayer}
 
 import java.util.UUID
 
-trait Card {
+trait CardOps {
 
   def open(name: String, ledgerId: LedgerId): IO[CardError, CardId]
   def authAmount(id: CardId, reason: String, amount: Amount): IO[CardError, Option[LockId]]
@@ -16,16 +16,27 @@ trait Card {
   def debit(id: CardId, reason: String, amount: Amount): IO[CardError, Boolean]
 }
 
-object Card {
+object CardOps {
 
-  val live: ZLayer[Has[CardEntity] with Has[LedgerEntity], Nothing, Has[Card]] = (for {
+  def open(name: String, ledgerId: LedgerId): ZIO[Has[CardOps], CardError, CardId] = ZIO.accessM[Has[CardOps]](_.get.open(name, ledgerId))
+
+  def authAmount(id: CardId, reason: String, amount: Amount): ZIO[Has[CardOps], CardError, Option[LockId]] =
+    ZIO.accessM[Has[CardOps]](_.get.authAmount(id, reason, amount))
+
+  def authSettlement(id: CardId, lockId: LockId): ZIO[Has[CardOps], CardError, Boolean] = ZIO.accessM(_.get.authSettlement(id, lockId))
+
+  def authRelease(id: CardId, lockId: LockId): ZIO[Has[CardOps], CardError, Boolean] = ZIO.accessM(_.get.authRelease(id, lockId))
+
+  def debit(id: CardId, reason: String, amount: Amount): ZIO[Has[CardOps], CardError, Boolean] = ZIO.accessM[Has[CardOps]](_.get.debit(id, reason, amount))
+
+  val live: ZLayer[Has[CardEntity] with Has[LedgerEntity], Nothing, Has[CardOps]] = (for {
     ledger <- ZIO.service[LedgerEntity]
     card   <- ZIO.service[CardEntity]
-  } yield new Card {
+  } yield new CardOps {
     override def authAmount(id: CardId, reason: String, amount: Amount): IO[CardError, Option[LockId]] = for {
       ledgerId <- retrieveLedgerId(id)
       lockId = LockId(Option(UUID.randomUUID()))
-      result <- ledger(ledgerId).lockAmount(reason, Lock(lockId = Some(lockId))).mapError(_ => UnknownCardError)
+      result <- ledger(ledgerId).lockAmount(reason, Lock(lockId = lockId)).mapError(_ => UnknownCardError)
     } yield if (result) Some(lockId) else None
 
     override def authSettlement(id: CardId, lockId: LockId): IO[CardError, Boolean] = for {
