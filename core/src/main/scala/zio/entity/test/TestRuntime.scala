@@ -23,21 +23,28 @@ object TestEntityRuntime {
     }
   }
 
-  trait TestEntity[Key, Algebra, State, Event, Reject]
-      extends Entity[Key, Algebra, State, Event, Reject]
-      with EntityProbe[Key, State, Event]
-      with TestReadSideEntity[Key, Event, Reject]
+  trait TestEntity[Key, Algebra, State, Event, Reject] extends EntityProbe[Key, State, Event] with TestReadSideEntity[Key, Event, Reject]
 
-  def testEntityWithProbe[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]
-    : URIO[Has[TestEntity[Key, Algebra, State, Event, Reject]], TestEntity[Key, Algebra, State, Event, Reject]] =
-    ZIO.service[TestEntity[Key, Algebra, State, Event, Reject]]
+  object TestEntity {
+    def probe[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]: URIO[Has[
+      TestEntity[Key, Algebra, State, Event, Reject]
+    ], TestEntity[Key, Algebra, State, Event, Reject]] =
+      ZIO.service[TestEntity[Key, Algebra, State, Event, Reject]]
+  }
+
+  def testEntityWithProbe[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag]: URIO[Has[Entity[Key, Algebra, State, Event, Reject]] with Has[
+    TestEntity[Key, Algebra, State, Event, Reject]
+  ], (Entity[Key, Algebra, State, Event, Reject], TestEntity[Key, Algebra, State, Event, Reject])] =
+    ZIO.services[Entity[Key, Algebra, State, Event, Reject], TestEntity[Key, Algebra, State, Event, Reject]]
 
   def testEntity[Key: Tag, Algebra: Tag, State: Tag, Event: Tag, Reject: Tag](
     tagging: Tagging[Key],
     eventSourcedBehaviour: EventSourcedBehaviour[Algebra, State, Event, Reject]
   )(implicit
     protocol: EntityProtocol[Algebra, Reject]
-  ): ZLayer[Clock with Has[Stores[Key, Event, State] with TestEventStore[Key, Event]], Throwable, Has[TestEntity[Key, Algebra, State, Event, Reject]]] = {
+  ): ZLayer[Clock with Has[Stores[Key, Event, State] with TestEventStore[Key, Event]], Throwable, Has[Entity[Key, Algebra, State, Event, Reject]] with Has[
+    TestEntity[Key, Algebra, State, Event, Reject]
+  ]] = {
 
     (for {
       clock  <- ZIO.service[Clock.Service]
@@ -59,7 +66,7 @@ object TestEntityRuntime {
       )
       probe <- EntityProbe.make[Key, State, Event](eventSourcedBehaviour.eventHandler)
       hub   <- Hub.unbounded[Unit]
-      probedEntity = new TestEntity[Key, Algebra, State, Event, Reject] {
+      probedEntity = new Entity[Key, Algebra, State, Event, Reject] with TestEntity[Key, Algebra, State, Event, Reject] {
         override def apply(
           key: Key
         ): Algebra = entity.apply(key)
@@ -92,7 +99,7 @@ object TestEntityRuntime {
         } yield ()
 
       }
-    } yield probedEntity).toLayer
+    } yield Has[Entity[Key, Algebra, State, Event, Reject]](probedEntity) ++ Has[TestEntity[Key, Algebra, State, Event, Reject]](probedEntity)).toLayerMany
   }
 }
 
@@ -134,8 +141,6 @@ object EntityProbe {
   ]] =
     for {
       stores <- ZIO.service[Stores[Key, Event, State] with TestEventStore[Key, Event]]
-//      memoryEventJournal <- ZIO.service[MemoryEventJournal[Key, Event]]
-//      snapshotStore      <- ZIO.service[Snapshotting[Key, State]]
     } yield new EntityProbe[Key, State, Event] {
 
       def probeForKey(key: Key): KeyedProbeOperations[State, Event] = KeyedProbeOperations(

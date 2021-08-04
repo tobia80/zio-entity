@@ -1,6 +1,8 @@
 package zio.entity.core
 
 import zio.clock.Clock
+import zio.duration.durationInt
+import zio.entity.annotations.Id
 import zio.entity.core.Fold.impossible
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
@@ -16,7 +18,7 @@ import zio.{IO, Ref, UIO}
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
   import CounterEntity.counterProtocol
-  private val layer = Clock.any and TestMemoryStores.live[String, CountEvent, Int]() to
+  private val layer = Clock.any and TestMemoryStores.live[String, CountEvent, Int](50.millis) to
     testEntity(
       CounterEntity.tagging,
       EventSourcedBehaviour[Counter, Int, CountEvent, String](new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage)
@@ -25,12 +27,12 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
   override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with LocalRuntimeWithProto")(
     testM("receives commands, produces events and updates state") {
       (for {
-        counter              <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
+        (counter, probe)     <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
         res                  <- counter("key").increase(3)
         finalRes             <- counter("key").decrease(2)
         secondEntityRes      <- counter("secondKey").increase(1)
         secondEntityFinalRes <- counter("secondKey").increase(5)
-        events               <- counter.probeForKey("key").events
+        events               <- probe.probeForKey("key").events
         fromState            <- counter("key").getValue
       } yield {
         assert(events)(equalTo(List(CountIncremented(3), CountDecremented(2)))) &&
@@ -43,14 +45,15 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
     },
     testM("Read side processing processes work") {
       (for {
-        counter <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
-        state   <- Ref.make(0)
+        (counter, probe) <- testEntityWithProbe[String, Counter, Int, CountEvent, String]
+        state            <- Ref.make(0)
         killSwitch <- counter
           .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(state, _, _)), _.getMessage)
+          .fork
         _            <- counter("key").increase(2)
         _            <- counter("key").increase(3)
         _            <- counter("key").decrease(1)
-        _            <- counter.triggerReadSideProcessing(1)
+        _            <- probe.triggerReadSideProcessing(1)
         valueOfState <- state.get
       } yield (assert(valueOfState)(equalTo(2)))).provideSomeLayer[TestEnvironment](layer)
     }
@@ -62,12 +65,16 @@ case class CountIncremented(number: Int) extends CountEvent
 case class CountDecremented(number: Int) extends CountEvent
 
 trait Counter {
+  @Id(4)
   def increase(number: Int): IO[String, Int]
 
+  @Id(5)
   def decrease(number: Int): IO[String, Int]
 
+  @Id(6)
   def noop: IO[String, Unit]
 
+  @Id(7)
   def getValue: IO[String, Int]
 }
 

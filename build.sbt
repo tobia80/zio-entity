@@ -25,9 +25,13 @@ val allDeps = Seq(
   "dev.zio" %% "zio" % zio,
   "dev.zio" %% "zio-streams" % zio,
   "dev.zio" %% "zio-test" % zio,
-  "dev.zio" %% "zio-schema" % "0.0.6",
+  "io.suzaku" %% "boopickle" % "1.4.0",
   "org.scala-lang" % "scala-reflect" % "2.13.6",
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
+) ++ testDeps
+
+val exampleDeps = Seq(
+  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 ) ++ testDeps
 
 val postgresDeps = Seq(
@@ -76,12 +80,17 @@ lazy val `akka-runtime` = module("zio-entity-akkaruntime", "akka-runtime", "Akka
 lazy val `benchmarks` = module("benchmarks", "benchmarks", "Benchmarks")
   .dependsOn(`core`, `akka-runtime`, `postgres`)
 
+lazy val `example` = module("example", "example", "Example of credit card processing")
+  .dependsOn(`core`, `akka-runtime`, `postgres`)
+  .settings(libraryDependencies ++= exampleDeps)
+  .settings(commonProtobufSettings)
+
 lazy val docs = project       // new documentation project
   .in(file("zio-entity-docs")) // important: it must not be docs/
   .dependsOn(`core`, `akka-runtime`, `postgres`)
   .enablePlugins(MdocPlugin)
 
-aggregateProjects(`core`, `akka-runtime`, `postgres`, `benchmarks`)
+aggregateProjects(`core`, `akka-runtime`, `postgres`, `benchmarks`, `example`)
 
 ThisBuild / parallelExecution := false
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")

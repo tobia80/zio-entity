@@ -3,6 +3,7 @@ package zio.entity.macros
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import zio.entity.data.EntityProtocol
+import zio.entity.macros.BoopickleCodec.codec
 import zio.{Chunk, IO}
 
 class DeriveMacrosSpec extends AnyFreeSpec {
@@ -14,23 +15,25 @@ class DeriveMacrosSpec extends AnyFreeSpec {
   }
 
   "Codec" - {
-    import zio.schema.DeriveSchema
-    import zio.schema.codec.ProtobufCodec._
+    import boopickle.Default._
+    import BoopickleCodec.chunkPickler
 
-    val inputCodec = DeriveSchema.gen[(Int, String)]
-    val mainCodec = DeriveSchema.gen[(String, Chunk[Byte])]
+    val inputCodec = codec[(Int, String)]
+    val mainCodec = codec[(String, Chunk[Byte])]
 
     "encode and decode" in {
       val input = (10, "hello")
-      val inputEnc = encode(inputCodec)(input)
-      val resultDec = decode(inputCodec)(inputEnc).getOrElse(fail("Error"))
+      val inputEnc = zio.Runtime.default.unsafeRun(inputCodec.encode(input))
+      println(inputEnc)
+      val resultDec = zio.Runtime.default.unsafeRun(inputCodec.decode(inputEnc))
       resultDec should ===(input)
       val encodedBitVector = ("1", inputEnc)
-      val result = encode(mainCodec)(encodedBitVector)
 
-      val decmain = decode(mainCodec)(result).getOrElse(fail("Error"))
+      val result = zio.Runtime.default.unsafeRun(mainCodec.encode(encodedBitVector))
+
+      val decmain = zio.Runtime.default.unsafeRun(mainCodec.decode(result))
       decmain should ===(encodedBitVector)
-      val originalResult = decode(inputCodec)(decmain._2).getOrElse(fail("Error"))
+      val originalResult = zio.Runtime.default.unsafeRun(inputCodec.decode(decmain._2))
       originalResult should ===(input)
 
     }

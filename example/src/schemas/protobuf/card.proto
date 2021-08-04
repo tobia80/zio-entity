@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package zio.entity.example;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "ledger.proto";
+import "scalapb/scalapb.proto";
+
+option (scalapb.options) = {
+    flat_package: true
+    lenses: true
+    preserve_unknown_fields: false
+};
+
+message CardEvent {
+
+  oneof sealed_value {
+    CardOpened cardOpened = 1;
+    CardClosed cardClosed = 2;
+  }
+}
+
+message CardOpened {
+    string name = 1;
+    LedgerId ledgerId = 2;
+}
+
+message CardClosed {
+}
+
+message AmountAuthorized {
+
+}
+
+message AuthExpired {
+    LockId lockId = 1;
+}
+
+
+
+message CardState {
+    oneof sealed_value {
+        Created created = 1;
+        Opened opened = 2;
+        Closed closed = 3;
+    }
+
+
+}
+
+message Created {
+
+}
+message Opened {
+    string name = 1;
+    LedgerId ledgerId = 2;
+}
+
+message Closed {
+    string name = 1;
+    LedgerId ledgerId = 2;
+}

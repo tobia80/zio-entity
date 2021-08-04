@@ -27,7 +27,9 @@ object ReadSideProcessor {
     journal: CommittableJournalQuery[Offset, Id, Event]
   ): ZStream[Any, Reject, KillSwitch] = {
     val sources: Seq[ZStream[Any, Reject, Committable[JournalEntry[Offset, Id, Event]]]] = readSideParams.tagging.tags.map { tag =>
-      journal.eventsByTag(tag, readSideParams.consumerId).mapError(errorHandler)
+      journal.eventsByTag(tag, readSideParams.consumerId).mapError { err =>
+        errorHandler(err)
+      }
     }
     for {
       (streams, processes) <- ZStream.fromEffect(buildStreamAndProcesses(sources))

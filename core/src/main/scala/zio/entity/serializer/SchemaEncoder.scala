@@ -4,6 +4,7 @@ import zio.Chunk
 
 import scala.util.Try
 
+//TODO make it compatible with zio-schema (look at Transform)
 object SchemaEncoder {
   def apply[T: SchemaEncoder]: SchemaEncoder[T] = implicitly[SchemaEncoder[T]]
 }

@@ -1,7 +1,7 @@
 package zio.entity.serializer.protobuf
 
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, GeneratedSealedOneof, TypeMapper}
-import zio.{Chunk, RIO, Task}
+import zio.Chunk
 import zio.entity.serializer.SchemaCodec
 
 import scala.util.Try

@@ -2,3 +2,4 @@
 /postgres/target/
 /core/target/
 /k8dns-runtime/target/
+/example/target/
