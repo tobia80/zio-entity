@@ -36,7 +36,7 @@ object CardOps {
     override def authAmount(id: CardId, reason: String, amount: Amount): IO[CardError, Option[LockId]] = for {
       ledgerId <- retrieveLedgerId(id)
       lockId = LockId(Option(UUID.randomUUID()))
-      result <- ledger(ledgerId).lockAmount(reason, Lock(lockId = lockId)).mapError(_ => UnknownCardError)
+      result <- ledger(ledgerId).lockAmount(reason, Lock(lockId = lockId, amount = amount)).mapError(_ => UnknownCardError)
     } yield if (result) Some(lockId) else None
 
     override def authSettlement(id: CardId, lockId: LockId): IO[CardError, Boolean] = for {

@@ -11,7 +11,7 @@ import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
 import zio.entity.macros.RpcMacro
 import zio.entity.readside.ReadSideParams
 import zio.test.Assertion.equalTo
-import zio.test.TestAspect.sequential
+import zio.test.TestAspect.{sequential, timeout}
 import zio.test.environment.TestEnvironment
 import zio.test.{assert, DefaultRunnableSpec, ZSpec}
 import zio.{Has, IO, UIO, ZEnv, ZLayer}
@@ -50,13 +50,14 @@ object RuntimeSpec extends DefaultRunnableSpec {
       (for {
         counter <- entity[String, Counter, Int, CountEvent, String]
         promise <- zio.Promise.make[Nothing, Int]
-        killSwitch <- counter
+        _ <- counter
           .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(promise, _, _)), _.getMessage)
+          .fork
         _      <- counter("key").increase(2)
         _      <- counter("key").decrease(1)
         result <- promise.await
       } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](Clock.live and layer)
-    } /*@@ timeout(5.seconds)*/
+    } @@ timeout(5.seconds)
   ) @@ sequential
 }
 

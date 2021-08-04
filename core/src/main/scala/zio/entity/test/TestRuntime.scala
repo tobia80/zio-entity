@@ -141,8 +141,6 @@ object EntityProbe {
   ]] =
     for {
       stores <- ZIO.service[Stores[Key, Event, State] with TestEventStore[Key, Event]]
-//      memoryEventJournal <- ZIO.service[MemoryEventJournal[Key, Event]]
-//      snapshotStore      <- ZIO.service[Snapshotting[Key, State]]
     } yield new EntityProbe[Key, State, Event] {
 
       def probeForKey(key: Key): KeyedProbeOperations[State, Event] = KeyedProbeOperations(

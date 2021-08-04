@@ -1,6 +1,8 @@
 package zio.entity.core
 
 import zio.clock.Clock
+import zio.duration.durationInt
+import zio.entity.annotations.Id
 import zio.entity.core.Fold.impossible
 import zio.entity.data.Tagging.Const
 import zio.entity.data.{ConsumerId, EntityProtocol, EventTag, Tagging}
@@ -16,7 +18,7 @@ import zio.{IO, Ref, UIO}
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
   import CounterEntity.counterProtocol
-  private val layer = Clock.any and TestMemoryStores.live[String, CountEvent, Int]() to
+  private val layer = Clock.any and TestMemoryStores.live[String, CountEvent, Int](50.millis) to
     testEntity(
       CounterEntity.tagging,
       EventSourcedBehaviour[Counter, Int, CountEvent, String](new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage)
@@ -47,6 +49,7 @@ object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
         state            <- Ref.make(0)
         killSwitch <- counter
           .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(state, _, _)), _.getMessage)
+          .fork
         _            <- counter("key").increase(2)
         _            <- counter("key").increase(3)
         _            <- counter("key").decrease(1)
@@ -62,12 +65,16 @@ case class CountIncremented(number: Int) extends CountEvent
 case class CountDecremented(number: Int) extends CountEvent
 
 trait Counter {
+  @Id(4)
   def increase(number: Int): IO[String, Int]
 
+  @Id(5)
   def decrease(number: Int): IO[String, Int]
 
+  @Id(6)
   def noop: IO[String, Unit]
 
+  @Id(7)
   def getValue: IO[String, Int]
 }
 

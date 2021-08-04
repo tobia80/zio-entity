@@ -48,7 +48,7 @@ message LedgerLockSettled {
 }
 
 message Amount {
-    option (scalapb.message).companion_extends = "zio.entity.example.models.AmountCompanion";
+//    option (scalapb.message).companion_extends = "zio.entity.example.models.AmountCompanion";
 
     enum Currency {
         USD = 0;

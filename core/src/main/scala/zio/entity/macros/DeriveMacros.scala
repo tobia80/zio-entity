@@ -88,10 +88,10 @@ class DeriveMacros(val c: blackbox.Context) {
         q"""
              (for {
                     // start common code
-                    arguments <- UIO.succeed(ProtobufCodec.encode(mainSchema)(hint -> Chunk.empty))
+                    arguments <- mainCodec.encode(hint -> Chunk.empty).mapError(errorHandler)
                     vector    <- commFn(arguments).mapError(errorHandler)
                     // end of common code
-                    decoded <- IO.fromTry(ProtobufCodec.decode(schemaResult)(vector).left.map(err => new Exception(err)).toTry).mapError(errorHandler)
+                    decoded <- codecResult.decode(vector).mapError(errorHandler)
                     result <- ZIO.fromEither(decoded)
                } yield result) 
           """
@@ -99,18 +99,18 @@ class DeriveMacros(val c: blackbox.Context) {
         val TupleNCons = TypeName(s"Tuple${paramTypes.size}")
         val TupleNConsTerm = TermName(s"Tuple${paramTypes.size}")
         q"""
-            val schemaInput = DeriveSchema.gen[$TupleNCons[..$paramTypes]]
+            val codecInput = codec[$TupleNCons[..$paramTypes]]
               val tuple: $TupleNCons[..$paramTypes] = $TupleNConsTerm(..$args)
              
               // if method has a protobuf message, use it
               (for {
-                    tupleEncoded <- IO.succeed(ProtobufCodec.encode(schemaInput)(tuple))
+                    tupleEncoded <- codecInput.encode(tuple).mapError(errorHandler)
              
                     // start common code
-                    arguments <- UIO.succeed(ProtobufCodec.encode(mainSchema)(hint -> tupleEncoded))
+                    arguments <- mainCodec.encode(hint -> tupleEncoded).mapError(errorHandler)
                     vector    <- commFn(arguments).mapError(errorHandler)
                     // end of common code
-                    decoded <- IO.fromTry(ProtobufCodec.decode(schemaResult)(vector).left.map(err => new Exception(err)).toTry).mapError(errorHandler)
+                    decoded <- codecResult.decode(vector).mapError(errorHandler)
                     result <- ZIO.fromEither(decoded)
                } yield result)"""
 
@@ -120,7 +120,7 @@ class DeriveMacros(val c: blackbox.Context) {
         q""" ZIO.accessM { _ =>
                        val hint = $hintToUse
                        
-                       val schemaResult = DeriveSchema.gen[Either[$reject, $out]]
+                       val codecResult = codec[Either[$reject, $out]]
                        ..$code
                      }"""
       method.copy(body = newBody).definition
@@ -152,7 +152,7 @@ class DeriveMacros(val c: blackbox.Context) {
             val TupleNCons = TypeName(s"Tuple${paramTypes.size}")
 
             q"""
-               val schemaInput = DeriveSchema.gen[$TupleNCons[..$paramTypes]]
+               val codecInput = codec[$TupleNCons[..$paramTypes]]
                """
           }
 
@@ -165,15 +165,15 @@ class DeriveMacros(val c: blackbox.Context) {
         val codecInputCode =
           if (argList.isEmpty) q"Task.unit"
           else
-            q"""Task.fromTry(ProtobufCodec.decode(schemaInput)(arguments).left.map(err => new Exception(err)).toTry)"""
+            q"""codecInput.decode(arguments)"""
         val invocation =
           q"""
-              val schemaResult = DeriveSchema.gen[Either[$reject, $out]]
+              val codecResult = codec[Either[$reject, $out]]
               ..$argsTerm
               for {
                   args <- $codecInputCode
                   result <- $runImplementation
-                  vector <- UIO.succeed(ProtobufCodec.encode(schemaResult)(result))
+                  vector <- codecResult.encode(result)
               } yield vector
               """
         q"""
@@ -182,14 +182,13 @@ class DeriveMacros(val c: blackbox.Context) {
     }
 
     q""" new EntityProtocol[$algebra, $reject] {
+            import boopickle.Default._
+            import zio.entity.macros.BoopickleCodec._
             import zio.entity.data.Invocation
-            import zio.schema.DeriveSchema
-            import zio.schema.codec.ProtobufCodec
             import zio._
-            import zio.entity.macros.Schemas._
+         
             
-
-             private val mainSchema = DeriveSchema.gen[(String, Chunk[Byte])]
+             private val mainCodec = codec[(String, Chunk[Byte])]
              val client: (Chunk[Byte] => Task[Chunk[Byte]], Throwable => $reject) => $algebra =
                (commFn: Chunk[Byte] => Task[Chunk[Byte]], errorHandler: Throwable => $reject) =>
                  new $algebra { ..$stubbedMethods }
@@ -203,7 +202,7 @@ class DeriveMacros(val c: blackbox.Context) {
                      // for each method extract the name, it could be a sequence number for the method
                        // according to the hint, extract the arguments
                        for {
-                         element <- Task.fromTry(ProtobufCodec.decode(mainSchema)(message).left.map(err => new Exception(err)).toTry)
+                         element <- mainCodec.decode(message)
                          hint = element._1
                          arguments = element._2
                          //use extractedHint to decide what to do here

@@ -35,7 +35,8 @@ trait Ledger {
 class LedgerEntityCommandHandler(combinators: Combinators[LedgerState, LedgerEvent, LedgerError]) extends Ledger {
   import combinators._
 
-  def credit(reason: String, amount: Amount): IO[LedgerError, Unit] = append(LedgerCredited(reason, amount))
+  def credit(reason: String, amount: Amount): IO[LedgerError, Unit] =
+    append(LedgerCredited(reason, amount))
 
   def debit(reason: String, amount: Amount): IO[LedgerError, Boolean] = for {
     currentState <- read
@@ -68,10 +69,16 @@ class LedgerEntityCommandHandler(combinators: Combinators[LedgerState, LedgerEve
 
 sealed trait LedgerError
 case class LedgerState(locks: List[Lock], actual: Map[Currency, BigDecimal]) {
-  def available: Map[Currency, BigDecimal] = Map.empty
+  def available: Map[Currency, BigDecimal] = {
+    locks.foldLeft(actual) { case (state, lock) =>
+      state.updatedWith(lock.amount.currency) { oldValue =>
+        Some(oldValue.getOrElse(BigDecimal(0)) - lock.amount.getValue)
+      }
+    }
+  }
 
   def isAvailable(amount: Amount): Boolean = {
-    available.get(amount.currency).fold[Boolean](false)(value => value > amount.getValue)
+    available.get(amount.currency).fold[Boolean](false)(value => value >= amount.getValue)
   }
 }
 

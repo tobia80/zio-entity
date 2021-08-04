@@ -82,7 +82,7 @@ the works.
 
 ### Schema evolution ready
 
-Plug in protobuf, avro, json, zio-schema in order to manage database and communication evolution.
+Plug in protobuf, avro, json in order to manage database and communication evolution.
 
 ### Testable in milliseconds
 
