@@ -1,5 +1,7 @@
 package zio.entity
 
+import java.util.UUID
+
 package object example {
 
   import scalapb.TypeMapper
