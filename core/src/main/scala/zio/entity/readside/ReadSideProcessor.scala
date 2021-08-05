@@ -62,7 +62,7 @@ object ReadSideProcessor {
             fiber   <- (queue.offer(s.interruptWhen(stopped)) *> stopped.await).fork
           } yield RunningProcess(
             fiber.join.unit.mapError(cause => new RuntimeException("Failure in ReadSideProcess " + cause)),
-            stopped.succeed().unit
+            stopped.succeed(()).unit
           )
         }
       }
