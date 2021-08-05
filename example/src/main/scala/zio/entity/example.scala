@@ -11,8 +11,8 @@ package object example {
 
   private def fromCommonBigDecimalValue(el: BDecimal): scala.math.BigDecimal = scala.math.BigDecimal(el.unscaledValue, el.scale)
 
-  implicit val bigDecimalConversions =
+  implicit val bigDecimalConversions: TypeMapper[BDecimal, BigDecimal] =
     TypeMapper[BDecimal, scala.math.BigDecimal](in => fromCommonBigDecimalValue(in))(toCommonBigDecimalValue)
 
-  implicit val uuidConversion = TypeMapper[PUUID, java.util.UUID](in => UUID.fromString(in.value))(out => PUUID(out.toString))
+  implicit val uuidConversion: TypeMapper[PUUID, UUID] = TypeMapper[PUUID, java.util.UUID](in => UUID.fromString(in.value))(out => PUUID(out.toString))
 }
