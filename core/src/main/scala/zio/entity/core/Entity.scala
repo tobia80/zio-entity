@@ -2,7 +2,7 @@ package zio.entity.core
 
 import zio.entity.readside.{KillSwitch, ReadSideParams}
 import zio.stream.ZStream
-import zio.{Has, IO, Tag, Task, UIO, URIO, ZIO}
+import zio.{Has, IO, Promise, Ref, Tag, Task, UIO, URIO, ZIO}
 
 trait Entity[Key, Algebra, State, Event, Reject] {
 
@@ -14,9 +14,14 @@ trait Entity[Key, Algebra, State, Event, Reject] {
   def readSideSubscription(
     readSideParams: ReadSideParams[Key, Event, Reject],
     errorHandler: Throwable => Reject
-  ): IO[Reject, TerminateSubscription] = (for {
-    killSwitch <- readSideStream(readSideParams, errorHandler)
-  } yield TerminateSubscription(killSwitch.shutdown.mapError(errorHandler))).runLast.map(_.getOrElse(TerminateSubscription(UIO.unit)))
+  ): IO[Reject, TerminateSubscription] = for {
+    ref        <- Ref.make[Option[KillSwitch]](None)
+    killReturn <- Promise.make[Reject, Unit]
+    _          <- readSideStream(readSideParams, errorHandler).interruptWhen(killReturn).foreach(el => ref.set(Some(el))).forkDaemon
+  } yield TerminateSubscription(ref.get.flatMap {
+    case Some(kill) => kill.shutdown.mapError(errorHandler)
+    case None       => killReturn.succeed(()).unit
+  })
 
   def readSideStream(
     readSideParams: ReadSideParams[Key, Event, Reject],
