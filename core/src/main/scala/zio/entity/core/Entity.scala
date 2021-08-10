@@ -10,7 +10,6 @@ trait Entity[Key, Algebra, State, Event, Reject] {
 
   case class TerminateSubscription(task: IO[Reject, Unit])
 
-  // TODO: fix terminate subscription
   def readSideSubscription(
     readSideParams: ReadSideParams[Key, Event, Reject],
     errorHandler: Throwable => Reject
