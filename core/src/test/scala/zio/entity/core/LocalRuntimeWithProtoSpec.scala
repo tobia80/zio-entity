@@ -18,7 +18,7 @@ import zio.{IO, Ref, UIO}
 object LocalRuntimeWithProtoSpec extends DefaultRunnableSpec {
 
   import CounterEntity.counterProtocol
-  private val layer = Clock.any and TestMemoryStores.live[String, CountEvent, Int](50.millis) to
+  private val layer = Clock.any and TestMemoryStores.make[String, CountEvent, Int](50.millis) to
     testEntity(
       CounterEntity.tagging,
       EventSourcedBehaviour[Counter, Int, CountEvent, String](new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage)

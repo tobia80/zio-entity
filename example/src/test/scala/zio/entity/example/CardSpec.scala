@@ -28,7 +28,7 @@ object CardSpec extends DefaultRunnableSpec {
   private val ledger: ZLayer[Clock, Throwable, Has[Entity[LedgerId, Ledger, LedgerState, LedgerEvent, LedgerError]] with Has[
     TestEntityRuntime.TestEntity[LedgerId, Ledger, LedgerState, LedgerEvent, LedgerError]
   ]] =
-    Clock.any and (Clock.any to TestMemoryStores.live[LedgerId, LedgerEvent, LedgerState](polling)) to
+    Clock.any and (Clock.any to TestMemoryStores.make[LedgerId, LedgerEvent, LedgerState](polling)) to
     testEntity(
       LedgerEntity.tagging,
       EventSourcedBehaviour[Ledger, LedgerState, LedgerEvent, LedgerError](
@@ -41,16 +41,16 @@ object CardSpec extends DefaultRunnableSpec {
   private val card: ZLayer[Clock, Throwable, Has[Entity[CardId, Card, CardState, CardEvent, CardError]] with Has[
     TestEntityRuntime.TestEntity[CardId, Card, CardState, CardEvent, CardError]
   ]] =
-    Clock.any and TestMemoryStores.live[CardId, CardEvent, CardState](polling) to
+    Clock.any and TestMemoryStores.make[CardId, CardEvent, CardState](polling) to
     testEntity(
       CardEntity.tagging,
       EventSourcedBehaviour[Card, CardState, CardEvent, CardError](new CardCommandHandler(_), CardEntity.eventHandlerLogic, _ => UnknownCardError)
     )
-  private val expiringStorage = MemoryExpiringStorage.live[LockKey, LockValue]
+  private val expiringStorage = MemoryExpiringStorage.make[LockKey, LockValue]
   private val lockTracker: ZLayer[Clock, Throwable, Has[ActiveLocksTracker]] = expiringStorage ++ ledger >>> ActiveLocksTracker.live
 
   private val authReleaser: ZLayer[Clock, Throwable, Has[AuthorizationReleaser]] =
-    Clock.any ++ expiringStorage ++ ledger >>> FixedPollAuthorizationReleaser.live(expirationDuration)
+    Clock.any ++ expiringStorage ++ ledger >>> FixedPollAuthorizationReleaser.make(expirationDuration)
   private val layer = ((card ++ ledger) >+> CardOps.live) ++ lockTracker ++ authReleaser
 
   private val canMakeCardTransaction = testM("Can make card transaction") {

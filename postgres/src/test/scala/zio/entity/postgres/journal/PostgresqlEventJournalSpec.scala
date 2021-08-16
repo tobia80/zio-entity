@@ -19,7 +19,7 @@ object PostgresqlEventJournalSpec extends DefaultRunnableSpec {
   private implicit val eventCodec = codecSealed[AnEvent, AnEventMessage]
 
   private val layer: ZLayer[Clock, Throwable, Has[EventJournalStore[Key, AnEvent]]] =
-    (Clock.any and PostgresqlTestContainerManaged.transact) to PostgresqlEventJournal.live[Key, AnEvent]("testevent", 100.millis)
+    (Clock.any and PostgresqlTestContainerManaged.transact) to PostgresqlEventJournal.make[Key, AnEvent]("testevent", 100.millis)
 
   private val tagging = Tagging.const[Key](EventTag("ok"))
   private val secondTagging = Tagging.const[Key](EventTag("second"))

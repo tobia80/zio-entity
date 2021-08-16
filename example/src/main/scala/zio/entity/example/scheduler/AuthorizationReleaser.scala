@@ -21,7 +21,7 @@ object UnknownAuthorizationReleaserError extends AuthorizationReleaserError
 
 object FixedPollAuthorizationReleaser {
 
-  def live(
+  def make(
     interval: Duration
   ): ZLayer[Has[ExpiringStorage[LockKey, LockValue]] with Has[LedgerEntity] with Has[Clock.Service], Nothing, Has[AuthorizationReleaser]] =
     (for {

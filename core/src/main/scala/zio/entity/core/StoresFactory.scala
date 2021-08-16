@@ -26,7 +26,7 @@ trait StoresFactory[Key, Event, State] {
 }
 
 object MemoryStores {
-  def live[Key: Tag, Event: Tag, State: Tag](
+  def make[Key: Tag, Event: Tag, State: Tag](
     pollingInterval: Duration,
     snapshotEvery: Int
   ): ZLayer[Clock, Nothing, Has[Stores[Key, Event, State]]] =
