@@ -126,7 +126,7 @@ object PostgresqlEventJournal {
     } yield ()).transact(transactor).unit
   }
 
-  def live[Key: SchemaCodec: Tag, Event: SchemaCodec: Tag](
+  def make[Key: SchemaCodec: Tag, Event: SchemaCodec: Tag](
     tableName: String,
     pollingInterval: Duration
   ): ZLayer[Has[Transactor[Task]] with Clock, Throwable, Has[EventJournalStore[Key, Event]]] = {

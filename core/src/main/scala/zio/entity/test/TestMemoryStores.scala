@@ -23,7 +23,7 @@ object TestMemoryStores {
     override def getAppendedStream(key: Key): ZStream[Any, Nothing, Event] = journalStore.getAppendedStream(key)
   }
 
-  def live[Key: Tag, Event: Tag, State: Tag](
+  def make[Key: Tag, Event: Tag, State: Tag](
     polling: Duration,
     snapEvery: Int = 2
   ): ZLayer[Clock, Nothing, Has[Stores[Key, Event, State] with TestEventStore[Key, Event]]] =

@@ -14,7 +14,7 @@ import zio.{Has, Task, UIO, ZIO, ZLayer, ZManaged}
 object PostgresqlKeyValueStoreSpec extends DefaultRunnableSpec {
 
   private val layer: ZLayer[Any, Throwable, Has[KeyValueStore[Key, AValue]]] =
-    PostgresqlTestContainerManaged.transact to PostgresqlKeyValueStore.live[Key, AValue]("test")
+    PostgresqlTestContainerManaged.transact to PostgresqlKeyValueStore.make[Key, AValue]("test")
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("A postgres key value store")(
     testM("Can store and retrieve values from db") {

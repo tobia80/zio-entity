@@ -12,7 +12,7 @@ import zio.test.assert
 object KeyedAlgebraCombinatorsSpec extends DefaultRunnableSpec {
 
   private val algebraConfigLayer: ZLayer[Clock, Nothing, Has[AlgebraCombinatorConfig[String, Int, OpEvent]]] =
-    MemoryStores.live[String, OpEvent, Int](100.millis, 2) to AlgebraCombinatorConfig.fromStores(Tagging.const(EventTag("test")))
+    MemoryStores.make[String, OpEvent, Int](100.millis, 2) to AlgebraCombinatorConfig.fromStores(Tagging.const(EventTag("test")))
 
   sealed trait OpEvent
 

@@ -58,7 +58,7 @@ object PostgresqlKeyValueStore {
     ).run.transact(transactor).unit
   }
 
-  def live[Key: SchemaEncoder: Tag, Value: SchemaCodec: Tag](
+  def make[Key: SchemaEncoder: Tag, Value: SchemaCodec: Tag](
     tableName: String
   ): ZLayer[Has[Transactor[Task]], Throwable, Has[KeyValueStore[Key, Value]]] = {
     ZIO.accessM[Has[Transactor[Task]]] { lay =>

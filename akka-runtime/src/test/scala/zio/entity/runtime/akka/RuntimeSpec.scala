@@ -19,7 +19,7 @@ import CounterEntity._
 
 object RuntimeSpec extends DefaultRunnableSpec {
 
-  private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] = Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
+  private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] = Clock.live to MemoryStores.make[String, CountEvent, Int](100.millis, 2)
   private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, Counter, Int, CountEvent, String]]] =
     (Clock.live and stores and Runtime.actorSettings("Test")) to Runtime
       .entityLive(
