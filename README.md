@@ -129,7 +129,7 @@ trait Counter {
   @Id(2)
   def decrease(number: Int): IO[String, Int]
 
-  @Id(4)
+  @Id(3)
   def getValue: IO[String, Int]
 }
 
