@@ -79,11 +79,13 @@ lazy val `akka-runtime` = module("zio-entity-akkaruntime", "akka-runtime", "Akka
 
 lazy val `benchmarks` = module("benchmarks", "benchmarks", "Benchmarks")
   .dependsOn(`core`, `akka-runtime`, `postgres`)
+  .settings(noPublishSettings)
 
 lazy val `example` = module("example", "example", "Example of credit card processing")
   .dependsOn(`core`, `akka-runtime`, `postgres`)
   .settings(libraryDependencies ++= exampleDeps)
   .settings(commonProtobufSettings)
+  .settings(noPublishSettings)
 
 lazy val docs = project       // new documentation project
   .in(file("zio-entity-docs")) // important: it must not be docs/
@@ -91,6 +93,24 @@ lazy val docs = project       // new documentation project
   .enablePlugins(MdocPlugin)
 
 aggregateProjects(`core`, `akka-runtime`, `postgres`, `benchmarks`, `example`)
+
+
+import ReleaseTransformations._
+
+releaseProcess := Seq[ReleaseStep](
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  commitReleaseVersion,
+  tagRelease,
+  publishArtifacts,
+  setNextVersion,
+  commitNextVersion,
+  releaseStepCommand("sonatypeReleaseAll"),
+  pushChanges
+)
 
 ThisBuild / parallelExecution := false
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
