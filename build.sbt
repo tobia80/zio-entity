@@ -96,6 +96,7 @@ aggregateProjects(`core`, `akka-runtime`, `postgres`, `benchmarks`, `example`)
 
 
 import ReleaseTransformations._
+releaseIgnoreUntrackedFiles := true
 
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
