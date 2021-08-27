@@ -97,6 +97,7 @@ aggregateProjects(`core`, `akka-runtime`, `postgres`, `benchmarks`, `example`)
 
 import ReleaseTransformations._
 releaseIgnoreUntrackedFiles := true
+releasePublishArtifactsAction := PgpKeys.publishSigned.value
 
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
