@@ -1,5 +1,6 @@
 ![ZIO Entity Logo](./zio_entity_logo.svg)
-[![Project stage][Stage]][Stage-Page] [![CI](https://github.com/thehonesttech/stem/actions/workflows/scala.yml/badge.svg?branch=master)](https://github.com/thehonesttech/zio-entity/actions/workflows/scala.yml) [![Scala Steward badge](https://img.shields.io/badge/Scala_Steward-helping-blue.svg?style=flat&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAMAAAARSr4IAAAAVFBMVEUAAACHjojlOy5NWlrKzcYRKjGFjIbp293YycuLa3pYY2LSqql4f3pCUFTgSjNodYRmcXUsPD/NTTbjRS+2jomhgnzNc223cGvZS0HaSD0XLjbaSjElhIr+AAAAAXRSTlMAQObYZgAAAHlJREFUCNdNyosOwyAIhWHAQS1Vt7a77/3fcxxdmv0xwmckutAR1nkm4ggbyEcg/wWmlGLDAA3oL50xi6fk5ffZ3E2E3QfZDCcCN2YtbEWZt+Drc6u6rlqv7Uk0LdKqqr5rk2UCRXOk0vmQKGfc94nOJyQjouF9H/wCc9gECEYfONoAAAAASUVORK5CYII=)](https://scala-steward.org) [![JitPack badge](https://jitpack.io/v/thehonesttech/zio-entity.svg)](https://jitpack.io/private#thehonesttech/zio-entity)
+[![Project stage][Stage]][Stage-Page] [![CI](https://github.com/thehonesttech/stem/actions/workflows/scala.yml/badge.svg?branch=master)](https://github.com/thehonesttech/zio-entity/actions/workflows/scala.yml) [![Scala Steward badge](https://img.shields.io/badge/Scala_Steward-helping-blue.svg?style=flat&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAMAAAARSr4IAAAAVFBMVEUAAACHjojlOy5NWlrKzcYRKjGFjIbp293YycuLa3pYY2LSqql4f3pCUFTgSjNodYRmcXUsPD/NTTbjRS+2jomhgnzNc223cGvZS0HaSD0XLjbaSjElhIr+AAAAAXRSTlMAQObYZgAAAHlJREFUCNdNyosOwyAIhWHAQS1Vt7a77/3fcxxdmv0xwmckutAR1nkm4ggbyEcg/wWmlGLDAA3oL50xi6fk5ffZ3E2E3QfZDCcCN2YtbEWZt+Drc6u6rlqv7Uk0LdKqqr5rk2UCRXOk0vmQKGfc94nOJyQjouF9H/wCc9gECEYfONoAAAAASUVORK5CYII=)](https://scala-steward.org) [![JitPack badge](https://jitpack.io/v/thehonesttech/zio-entity.svg)](https://jitpack.io/private#thehonesttech/zio-entity) [![Snapshot Artifacts][Badge-SonatypeSnapshots]][Link-SonatypeSnapshots]
+
 
 # ZIO-Entity
 Event sourcing refers to a collection of patterns based on persisting the full history of a domain as a sequence of
@@ -184,6 +185,8 @@ Choose the Runtime and build layer
 
 ```
 
+[Link-SonatypeSnapshots]: https://oss.sonatype.org/content/repositories/snapshots/io/github/thehonesttech/zio-entity-core_2.13/ "Sonatype Snapshots"
 
 [Stage]: https://img.shields.io/badge/Project%20Stage-Development-yellowgreen.svg
 [Stage-Page]: https://github.com/zio/zio/wiki/Project-Stages
+[Badge-SonatypeSnapshots]: https://img.shields.io/nexus/s/https/oss.sonatype.org/io.github.thehonesttech/zio-entity-core_2.13.svg "Sonatype Snapshots"
