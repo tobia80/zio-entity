@@ -190,6 +190,6 @@ Choose the Runtime and build layer
 
 [Stage]: https://img.shields.io/badge/Project%20Stage-Development-yellowgreen.svg
 [Stage-Page]: https://github.com/zio/zio/wiki/Project-Stages
-[Badge-SonatypeReleases]: https://img.shields.io/nexus/s/https/oss.sonatype.org/io.github.thehonesttech/zio-entity-core_2.13.svg "Sonatype Releases"
+[Badge-SonatypeReleases]: https://img.shields.io/nexus/r/https/oss.sonatype.org/io.github.thehonesttech/zio-entity-core_2.13.svg "Sonatype Releases"
 
 [Badge-SonatypeSnapshots]: https://img.shields.io/nexus/s/https/oss.sonatype.org/io.github.thehonesttech/zio-entity-core_2.13.svg "Sonatype Snapshots"
