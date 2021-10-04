@@ -90,6 +90,26 @@ Plug in protobuf, avro, json in order to manage database and communication evolu
 Being part of ZIO ecosystem and using ZIO Stream, tests can be easy, quick and deterministic, no more eventually, no
 more flakyness. Test tools are available in order to test async interaction in a Reactive way.
 
+### Installation
+
+Include ZIO-Entity core in your project by adding the following to your build.sbt file:
+
+```scala
+libraryDependencies += "io.github.thehonesttech" %% "zio-entity-core" % "<latest version>"
+```
+
+You can add the runtime you prefer (currently only akka-runtime is complete)
+
+```scala
+libraryDependencies += "io.github.thehonesttech" %% "zio-entity-akkaruntime" % "<latest version>"
+```
+
+and the storage you prefer (Postgres in this case)
+
+```scala
+libraryDependencies += "io.github.thehonesttech" %% "zio-entity-postgres" % "<latest version>"
+```
+
 ### Example
 
 Interacting with entities is very simple, and they behave like normal ZIO effects:
