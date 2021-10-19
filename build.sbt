@@ -40,7 +40,7 @@ val postgresDeps = Seq(
   "org.tpolecat" %% "doobie-postgres" % "0.13.4",
   "dev.zio" %% "zio-interop-cats" % "2.5.1.0",
   "ch.qos.logback" % "logback-classic" % "1.2.6" % Test,
-  "org.testcontainers" % "postgresql" % "1.16.0" % Test
+  "org.testcontainers" % "postgresql" % "1.16.1" % Test
 ) ++ testDeps
 
 val akkaDeps = Seq(
