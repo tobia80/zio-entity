@@ -29,7 +29,7 @@ object RuntimeSpec extends DefaultRunnableSpec {
       )
       .toLayer
 
-  override def spec: ZSpec[TestEnvironment, Any] = suite("An entity built with Akka Runtime")(
+  override def spec: ZSpec[TestEnvironment, Any] = suite("An entity")(
     testM("receives commands and updates state") {
       (for {
         counter              <- entity[String, Counter, Int, CountEvent, String]
@@ -51,13 +51,17 @@ object RuntimeSpec extends DefaultRunnableSpec {
         counter <- entity[String, Counter, Int, CountEvent, String]
         promise <- zio.Promise.make[Nothing, Int]
         _ <- counter
-          .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(promise, _, _)), _.getMessage)
+          .readSideSubscription(readSideParams = ReadSideParams(name = "read", consumerId = ConsumerId("1"),
+            tagging = CounterEntity.tagging, parallelism = 2,
+            logic = (_, event) => ReadSide.countIncreaseEvents(promise, event)),
+            errorHandler = _.getMessage)
           .fork
         _      <- counter("key").increase(2)
         _      <- counter("key").decrease(1)
         result <- promise.await
-      } yield (assert(result)(equalTo(2)))).provideSomeLayer[TestEnvironment](Clock.live and layer)
+      } yield assert(result)(equalTo(2))).provideSomeLayer[TestEnvironment](Clock.live and layer)
     } @@ timeout(5.seconds)
+
   ) @@ sequential
 }
 
@@ -84,7 +88,6 @@ class CounterCommandHandler(combinators: Combinators[Int, CountEvent, String]) e
   def increase(number: Int): IO[String, Int] =
     read flatMap { res =>
       append(CountIncremented(number)).as(res + number)
-
     }
 
   def decrease(number: Int): IO[String, Int] =
@@ -117,7 +120,7 @@ object CounterEntity {
 
 object ReadSide {
 
-  def countIncreaseEvents(promise: zio.Promise[Nothing, Int], id: String, countEvent: CountEvent): IO[String, Unit] =
+  def countIncreaseEvents(promise: zio.Promise[Nothing, Int], countEvent: CountEvent): IO[String, Unit] =
     countEvent match {
       case CountIncremented(value) =>
         promise.succeed(value).unit

@@ -58,7 +58,7 @@ object CardSpec extends DefaultRunnableSpec {
     for {
       ledgerEntity  <- LedgerEntity(ledgerId)
       cardId        <- CardOps.open("Tobia", ledgerId)
-      _             <- ledgerEntity.credit("Initial credit", Amount(Currency.EUR, Some(100)) /*, Amount(Currency.EUR, Some(100))*/ )
+      _             <- ledgerEntity.credit("Initial credit", Amount(Currency.EUR, Some(100)))
       result        <- CardOps.debit(cardId, "First payment", Amount(Currency.EUR, Some(80)))
       resultFailing <- CardOps.debit(cardId, "Failing payment", Amount(Currency.EUR, Some(30)))
       result2       <- CardOps.debit(cardId, "Second payment", Amount(Currency.EUR, Some(20)))
@@ -80,9 +80,9 @@ object CardSpec extends DefaultRunnableSpec {
     )
   }
 
-  private val canExpireAuth = testM("Can use authorization transactions that expires") {
+  private val canExpireAuth = testM("Can expire authorization locks") {
     val ledgerId = LedgerId(Some(UUID.randomUUID()))
-    (for {
+    for {
       _            <- JobRunners.startJobs
       ledgerEntity <- ZIO.service[LedgerEntity]
       _            <- ledgerEntity(ledgerId).credit("Initial credit", Amount(Currency.EUR, Some(100)))
@@ -93,8 +93,7 @@ object CardSpec extends DefaultRunnableSpec {
       ledger       <- ledgerEntity(ledgerId).getLedger
     } yield assertTrue(lockIdMaybe.isDefined && lockIdMaybe2.isDefined) && assertTrue(
       ledger.available == Map[Currency, BigDecimal](Currency.EUR -> BigDecimal(20))
-    ))
-
+    )
   }
 
   override def spec = suite("A credit card interaction")(
