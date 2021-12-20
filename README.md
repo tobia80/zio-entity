@@ -52,7 +52,7 @@ tests can run in ms, they are deterministic, fast and easy to reason.
 Calling an Entity is as easy as writing
 
 ```scala
-accounts(fooAccount).credit(10 EUR)
+counters("John").increase(10)
 ```
 
 ### RPC style Entities
@@ -130,7 +130,10 @@ for {
   counter <- entity[String, Counter, Int, CountEvent, String]
   state <- Ref.make(0)
   killSwitch <- counter
-    .readSideSubscription(ReadSideParams("read", ConsumerId("1"), CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(state, _, _)), _.getMessage)
+    .readSideSubscription(
+      ReadSideParams("read", 
+        ConsumerId("1"),
+        CounterEntity.tagging, 2, ReadSide.countIncreaseEvents(state, _, _)), _.getMessage)
 } yield killSwitch
 ```
 
@@ -196,11 +199,24 @@ Define the rpc protocol with the Command handler, the state, the event and the e
 Choose the Runtime and build layer
 
 ```scala
-  private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] = Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
+
+trait Combinators[+State, -Event, Reject] {
+  def read: IO[Reject, State]
+  def append(es: Event, other: Event*): IO[Reject, Unit]
+  def ignore: UIO[Unit] = IO.unit
+  def reject[A](r: Reject): IO[Reject, A]
+}
+
+trait Entity[Key, Algebra, State, Event, Reject]
+
+private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] =
+    Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
   
-  private val layer: ZLayer[ZEnv, Throwable, Has[Entity[String, Counter, Int, CountEvent, String]]] =
+  private val counter: ZLayer[ZEnv, Throwable, Has[Entity[String, Counter, Int, CountEvent, String]]] =
     (Clock.live and stores and Runtime.actorSettings("Test")) to Runtime
-      .entityLive("Counter", CounterEntity.tagging, EventSourcedBehaviour[Counter, Int, CountEvent, String](new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage))
+      .entityLive("Counter", CounterEntity.tagging,
+        EventSourcedBehaviour[Counter, Int, CountEvent, String](
+          new CounterCommandHandler(_), CounterEntity.eventHandlerLogic, _.getMessage))
       .toLayer
 
 ```

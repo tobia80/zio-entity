@@ -44,7 +44,6 @@ class LedgerEntityCommandHandler(combinators: Combinators[LedgerState, LedgerEve
   } yield result
 
   def lockAmount(reason: String, lock: Lock): IO[LedgerError, Boolean] = for {
-    //TODO check first if lock id is already present
     currentState <- read
     result       <- if (currentState.isAvailable(lock.amount)) append(LedgerLockAdded(reason, lock)).as(true) else IO.succeed(false)
   } yield result
