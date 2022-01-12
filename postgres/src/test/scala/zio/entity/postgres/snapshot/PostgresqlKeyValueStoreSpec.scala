@@ -8,12 +8,12 @@ import zio.entity.postgres.example.{AValue, Key}
 import zio.entity.serializer.protobuf.ProtobufCodecs._
 import zio.test.Assertion.equalTo
 import zio.test.environment.TestEnvironment
-import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{Has, Task, UIO, ZIO, ZLayer, ZManaged}
+import zio.test.{DefaultRunnableSpec, ZSpec, assert}
+import zio.{Has, Task, UIO, ZEnv, ZIO, ZLayer, ZManaged}
 
 object PostgresqlKeyValueStoreSpec extends DefaultRunnableSpec {
 
-  private val layer: ZLayer[Any, Throwable, Has[KeyValueStore[Key, AValue]]] =
+  private val layer: ZLayer[ZEnv, Throwable, Has[KeyValueStore[Key, AValue]]] =
     PostgresqlTestContainerManaged.transact to PostgresqlKeyValueStore.make[Key, AValue]("test")
 
   override def spec: ZSpec[TestEnvironment, Any] = suite("A postgres key value store")(
@@ -45,7 +45,7 @@ object PostgresqlTestContainerManaged {
     ZIO.effect(container.start()).as(container)
   } { el => UIO.succeed(el.stop()) }
 
-  val transact: ZLayer[Any, Throwable, Has[Transactor[Task]]] = {
+  val transact: ZLayer[ZEnv, Throwable, Has[Transactor[Task]]] = {
     (for {
       container <- containerManaged
       transact  <- PostgresTransact.transact(container.getJdbcUrl, container.getUsername, container.getPassword)

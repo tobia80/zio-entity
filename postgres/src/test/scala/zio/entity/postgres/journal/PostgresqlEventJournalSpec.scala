@@ -9,8 +9,8 @@ import zio.entity.postgres.journal.PostgresqlEventJournal.EventJournalStore
 import zio.entity.postgres.snapshot.PostgresqlTestContainerManaged
 import zio.test.Assertion.equalTo
 import zio.test.environment.{TestClock, TestEnvironment}
-import zio.test.{assert, DefaultRunnableSpec, ZSpec}
-import zio.{Chunk, Has, NonEmptyChunk, ZIO, ZLayer}
+import zio.test.{DefaultRunnableSpec, ZSpec, assert}
+import zio.{Chunk, Has, NonEmptyChunk, ZEnv, ZIO, ZLayer}
 import zio.entity.serializer.protobuf.ProtobufCodecs._
 import zio.test.TestAspect.sequential
 
@@ -18,7 +18,7 @@ object PostgresqlEventJournalSpec extends DefaultRunnableSpec {
 
   private implicit val eventCodec = codecSealed[AnEvent, AnEventMessage]
 
-  private val layer: ZLayer[Clock, Throwable, Has[EventJournalStore[Key, AnEvent]]] =
+  private val layer: ZLayer[ZEnv, Throwable, Has[EventJournalStore[Key, AnEvent]]] =
     (Clock.any and PostgresqlTestContainerManaged.transact) to PostgresqlEventJournal.make[Key, AnEvent]("testevent", 100.millis)
 
   private val tagging = Tagging.const[Key](EventTag("ok"))
