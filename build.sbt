@@ -5,7 +5,7 @@ lazy val root = (project in file("."))
     inThisBuild(
       List(
         organization := "zio",
-        scalaVersion := "2.13.7",
+        scalaVersion := "2.13.8",
         version := "0.1.3-SNAPSHOT"
       )
     ),
@@ -26,7 +26,7 @@ val allDeps = Seq(
   "dev.zio" %% "zio-streams" % zio,
   "dev.zio" %% "zio-test" % zio,
   "io.suzaku" %% "boopickle" % "1.4.0",
-  "org.scala-lang" % "scala-reflect" % "2.13.7",
+  "org.scala-lang" % "scala-reflect" % "2.13.8",
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
 ) ++ testDeps
 
@@ -35,9 +35,10 @@ val exampleDeps = Seq(
 ) ++ testDeps
 
 val postgresDeps = Seq(
-  "org.tpolecat" %% "doobie-core" % "0.13.4",
-  "org.tpolecat" %% "doobie-hikari" % "0.13.4",
-  "org.tpolecat" %% "doobie-postgres" % "0.13.4",
+
+  "org.tpolecat" %% "doobie-core" % "1.0.0-RC2",
+  "org.tpolecat" %% "doobie-hikari" % "1.0.0-RC2",
+  "org.tpolecat" %% "doobie-postgres" % "1.0.0-RC2",
   "dev.zio" %% "zio-interop-cats" % "3.2.9.0",
   "ch.qos.logback" % "logback-classic" % "1.2.10" % Test,
   "org.testcontainers" % "postgresql" % "1.16.2" % Test
