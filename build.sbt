@@ -45,7 +45,7 @@ val postgresDeps = Seq(
 
 val akkaDeps = Seq(
   "com.typesafe.akka" %% "akka-cluster-sharding" % "2.6.18",
-  "com.typesafe.akka" %% "akka-cluster" % "2.6.18",
+  "com.typesafe.akka" %% "akka-cluster" % "2.6.19",
 ) ++ testDeps
 
 
