@@ -35,6 +35,7 @@ val exampleDeps = Seq(
 ) ++ testDeps
 
 val postgresDeps = Seq(
+
   "org.tpolecat" %% "doobie-core" % "1.0.0-RC2",
   "org.tpolecat" %% "doobie-hikari" % "1.0.0-RC2",
   "org.tpolecat" %% "doobie-postgres" % "1.0.0-RC2",
