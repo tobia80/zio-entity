@@ -210,7 +210,7 @@ trait Combinators[+State, -Event, Reject] {
 trait Entity[Key, Algebra, State, Event, Reject]
 
 private val stores: ZLayer[Any, Nothing, Has[Stores[String, CountEvent, Int]]] =
-    Clock.live to MemoryStores.live[String, CountEvent, Int](100.millis, 2)
+    Clock.live to MemoryStores.make[String, CountEvent, Int](100.millis, 2)
   
   private val counter: ZLayer[ZEnv, Throwable, Has[Entity[String, Counter, Int, CountEvent, String]]] =
     (Clock.live and stores and Runtime.actorSettings("Test")) to Runtime
