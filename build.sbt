@@ -39,13 +39,13 @@ val postgresDeps = Seq(
   "org.tpolecat" %% "doobie-hikari" % "1.0.0-RC2",
   "org.tpolecat" %% "doobie-postgres" % "1.0.0-RC2",
   "dev.zio" %% "zio-interop-cats" % "3.2.9.1",
-  "ch.qos.logback" % "logback-classic" % "1.2.11" % Test,
+  "ch.qos.logback" % "logback-classic" % "1.4.0" % Test,
   "org.testcontainers" % "postgresql" % "1.17.3" % Test
 ) ++ testDeps
 
 val akkaDeps = Seq(
-  "com.typesafe.akka" %% "akka-cluster-sharding" % "2.6.19",
-  "com.typesafe.akka" %% "akka-cluster" % "2.6.19",
+  "com.typesafe.akka" %% "akka-cluster-sharding" % "2.6.20",
+  "com.typesafe.akka" %% "akka-cluster" % "2.6.20",
 ) ++ testDeps
 
 
