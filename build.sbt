@@ -25,7 +25,7 @@ val allDeps = Seq(
   "dev.zio" %% "zio" % zio,
   "dev.zio" %% "zio-streams" % zio,
   "dev.zio" %% "zio-test" % zio,
-  "io.suzaku" %% "boopickle" % "1.4.0",
+  "io.suzaku" %% "boopickle" % "1.5.0",
   "org.scala-lang" % "scala-reflect" % "2.13.8",
   "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
 ) ++ testDeps
